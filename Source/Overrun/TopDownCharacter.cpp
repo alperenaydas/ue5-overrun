@@ -1,0 +1,99 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "TopDownCharacter.h"
+
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
+#include "TopDownCMC.h"
+#include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+
+// Sets default values
+ATopDownCharacter::ATopDownCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UTopDownCMC>(ACharacter::CharacterMovementComponentName))
+{
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = false;
+	GetCapsuleComponent()->InitCapsuleSize(34.f, 88.f);
+	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -88.f));
+	GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	TopDownCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
+	CameraBoom->SetupAttachment(RootComponent);
+	TopDownCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	CameraBoom->SetUsingAbsoluteRotation(true);
+	CameraBoom->bInheritPitch = false;
+	CameraBoom->bInheritYaw = false;
+	CameraBoom->bInheritRoll = false;
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f));
+	CameraBoom->TargetArmLength = 1000.f;
+	CameraBoom->bDoCollisionTest = false;
+
+	TopDownCamera->bUsePawnControlRotation = false;
+
+
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
+	bUseControllerRotationPitch = false;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->bUseControllerDesiredRotation = true;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 1080.f, 0.f);
+	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+}
+
+// Called when the game starts or when spawned
+void ATopDownCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
+void ATopDownCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+
+	// Client-side, after possession resolves, on the machine that owns this pawn.
+	// BeginPlay is too early (controller link may be unresolved); OnPossess is server-only.
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			if (DefaultMappingContext)
+			{
+				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			}
+		}
+	}
+}
+
+
+void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		if (MoveAction)
+		{
+			EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ATopDownCharacter::OnMoveAction);
+		}
+	}
+}
+
+void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
+{
+	const FVector2D MoveInput = Value.Get<FVector2D>();
+
+	// World axes on purpose: the camera boom's yaw is pinned to 0, so screen axes and
+	// world axes coincide. If the boom yaw ever changes, both this and the aim-stick
+	// vector in ATopDownPlayerController must be rotated by the boom's yaw.
+	AddMovementInput(FVector::ForwardVector, MoveInput.Y);
+	AddMovementInput(FVector::RightVector, MoveInput.X);
+}
