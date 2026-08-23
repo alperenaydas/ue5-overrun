@@ -3,7 +3,11 @@
 
 #include "TopDownGameMode.h"
 
+#include "OverrunHUD.h"
+#include "TopDownPlayerController.h"
+
 ATopDownGameMode::ATopDownGameMode()
 {
-	PlayerControllerClass = ATopDownGameMode::StaticClass();
+	PlayerControllerClass = ATopDownPlayerController::StaticClass();
+	HUDClass = AOverrunHUD::StaticClass();
 }

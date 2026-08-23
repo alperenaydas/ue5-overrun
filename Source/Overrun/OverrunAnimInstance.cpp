@@ -4,12 +4,13 @@
 #include "OverrunAnimInstance.h"
 
 #include "TopDownCharacter.h"
+#include "TopDownCMC.h"
 
 void UOverrunAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 	
-	OwningCharacter = Cast<ATopDownCharacter>(TryGetPawnOwner());	
+	OwningCharacter = Cast<ATopDownCharacter>(TryGetPawnOwner());
 }
 
 void UOverrunAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
@@ -19,7 +20,13 @@ void UOverrunAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	if (OwningCharacter)
 	{
 		GroundSpeed = OwningCharacter->GetGroundSpeed();
-		LocomotionDirection = OwningCharacter->GetLocomotionDirection();
 		bIsMoving = GroundSpeed > 3.f;
+		if (bIsMoving)
+		{
+			LocomotionDirection = OwningCharacter->GetLocomotionDirection();
+		}
+
+		const float TargetPlayRate = GroundSpeed / OwningCharacter->GetCharacterMovement()->MaxWalkSpeed; 
+		PlayRate = FMath::Clamp(TargetPlayRate, 0.25f, 2.5f);
 	}
 }

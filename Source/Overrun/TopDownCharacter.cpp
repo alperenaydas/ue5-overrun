@@ -85,6 +85,11 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ATopDownCharacter::OnMoveAction);
 		}
+		if (SprintAction)
+		{
+			EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnSprintActionStarted);
+			EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &ATopDownCharacter::OnSprintActionCompleted);
+		}
 	}
 }
 
@@ -107,4 +112,20 @@ void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 	// vector in ATopDownPlayerController must be rotated by the boom's yaw.
 	AddMovementInput(FVector::ForwardVector, MoveInput.Y);
 	AddMovementInput(FVector::RightVector, MoveInput.X);
+}
+
+void ATopDownCharacter::OnSprintActionStarted(const FInputActionValue& Value)
+{
+	if (Cast<UTopDownCMC>(GetCharacterMovement()))
+	{
+		Cast<UTopDownCMC>(GetCharacterMovement())->SetSprinting(true);
+	}
+}
+
+void ATopDownCharacter::OnSprintActionCompleted(const FInputActionValue& Value)
+{
+	if (Cast<UTopDownCMC>(GetCharacterMovement()))
+	{
+		Cast<UTopDownCMC>(GetCharacterMovement())->SetSprinting(false);
+	}
 }

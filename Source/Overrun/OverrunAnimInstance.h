@@ -27,6 +27,9 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
 	bool bIsMoving = false;
 	
+	UPROPERTY(BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
+	float PlayRate = 1.f;
+	
 	UPROPERTY()
 	TObjectPtr<ATopDownCharacter> OwningCharacter = nullptr;
 };
