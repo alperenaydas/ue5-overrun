@@ -6,6 +6,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "KismetAnimationLibrary.h"
 #include "TopDownCMC.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -85,6 +86,16 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 			EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ATopDownCharacter::OnMoveAction);
 		}
 	}
+}
+
+double ATopDownCharacter::GetGroundSpeed() const
+{
+	return GetVelocity().Size2D();
+}
+
+float ATopDownCharacter::GetLocomotionDirection() const
+{
+	return UKismetAnimationLibrary::CalculateDirection(GetVelocity(), GetActorRotation());
 }
 
 void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)

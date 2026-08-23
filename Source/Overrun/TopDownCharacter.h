@@ -36,6 +36,11 @@ protected:
 public:
 	virtual void PawnClientRestart() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Locomotion")
+	double GetGroundSpeed() const;
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Locomotion")
+	float GetLocomotionDirection() const;
 
 private:
 	void OnMoveAction(const FInputActionValue& Value);
