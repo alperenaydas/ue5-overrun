@@ -32,6 +32,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> SprintAction;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> DashAction;
 
 protected:
 	virtual void BeginPlay() override;
@@ -49,4 +52,5 @@ private:
 	void OnMoveAction(const FInputActionValue& Value);
 	void OnSprintActionStarted(const FInputActionValue& Value);
 	void OnSprintActionCompleted(const FInputActionValue& Value);
+	void OnDashActionStarted(const FInputActionValue& Value);
 };

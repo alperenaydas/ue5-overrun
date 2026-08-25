@@ -16,6 +16,7 @@ public:
 	FSavedMove_TopDown();
 	
 	uint8 bWantsToSprint : 1;
+	uint8 bWantsToDash : 1;
 	
 	virtual void Clear() override;
 	virtual void SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, class FNetworkPredictionData_Client_Character& ClientData) override;
@@ -47,10 +48,16 @@ public:
 	UTopDownCMC();
 	UPROPERTY(EditDefaultsOnly)
 	float MaxSprintSpeed = 1000.f;
+	UPROPERTY(EditDefaultsOnly)
+	float DashImpulseValue = 10000.f;
+	UPROPERTY(EditDefaultsOnly)
+	float DashCooldownDuration = 1.f;
 
 	
 private:
 	uint8 bWantsToSprint : 1;
+	uint8 bWantsToDash : 1;
+	float DashRemainingCooldown = 0.f;
 	// if more than 64 corrections in single second, we are underreporting.
 	static constexpr int32 CorrectionHistorySize = 64;
 	double CorrectionHistory[CorrectionHistorySize];
@@ -58,6 +65,7 @@ private:
 	
 public:
 	void SetSprinting(const bool IsSprinting);
+	void TriggerDashing();
 	virtual float GetMaxSpeed() const override;
 	virtual class FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 	int32 LastSecondCorrectionCount() const;
@@ -66,5 +74,8 @@ public:
 protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 	virtual void OnClientCorrectionReceived(class FNetworkPredictionData_Client_Character& ClientData, float TimeStamp, FVector NewLocation, FVector NewVelocity, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode, FVector ServerGravityDirection) override;
+	bool CanDash() const;
+	void Dash();
+	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
 	
 };

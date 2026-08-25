@@ -90,6 +90,10 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 			EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnSprintActionStarted);
 			EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &ATopDownCharacter::OnSprintActionCompleted);
 		}
+		if (DashAction)
+		{
+			EIC->BindAction(DashAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDashActionStarted);
+		}
 	}
 }
 
@@ -116,16 +120,24 @@ void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnSprintActionStarted(const FInputActionValue& Value)
 {
-	if (Cast<UTopDownCMC>(GetCharacterMovement()))
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetCharacterMovement()))
 	{
-		Cast<UTopDownCMC>(GetCharacterMovement())->SetSprinting(true);
+		CMC->SetSprinting(true);
 	}
 }
 
 void ATopDownCharacter::OnSprintActionCompleted(const FInputActionValue& Value)
 {
-	if (Cast<UTopDownCMC>(GetCharacterMovement()))
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetCharacterMovement()))
 	{
-		Cast<UTopDownCMC>(GetCharacterMovement())->SetSprinting(false);
+		CMC->SetSprinting(false);
+	}
+}
+
+void ATopDownCharacter::OnDashActionStarted(const FInputActionValue& Value)
+{
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetCharacterMovement()))
+	{
+		CMC->TriggerDashing();
 	}
 }
