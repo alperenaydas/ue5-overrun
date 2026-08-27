@@ -11,6 +11,9 @@ FSavedMove_TopDown::FSavedMove_TopDown() : Super()
 	bWantsToDash = false;
 	SavedDashActiveRemaining = 0.f;
 	SavedDashRemainingCooldown = 0.f;
+	SavedCurrentStamina = 0.f;
+	SavedStaminaRecoveryRemainingCooldown = 0.f;
+	bStaminaExhausted = false;
 }
 
 void FSavedMove_TopDown::Clear()
@@ -20,6 +23,9 @@ void FSavedMove_TopDown::Clear()
 	bWantsToDash = false;
 	SavedDashActiveRemaining = 0.f;
 	SavedDashRemainingCooldown = 0.f;
+	SavedCurrentStamina = 0.f;
+	SavedStaminaRecoveryRemainingCooldown = 0.f;
+	bStaminaExhausted = false;
 }
 
 // capture (will be predicted)
@@ -30,8 +36,6 @@ void FSavedMove_TopDown::SetMoveFor(ACharacter* C, float InDeltaTime, FVector co
 	{
 		bWantsToSprint = CMC->bWantsToSprint;
 		bWantsToDash = CMC->bWantsToDash;
-		SavedDashActiveRemaining = CMC->DashActiveRemaining;
-		SavedDashRemainingCooldown = CMC->DashRemainingCooldown;
 		// impulse timing inside a merged delta time can't be restored. thats why we need force no combine.
 		if (bWantsToDash)
 		{
@@ -50,6 +54,9 @@ void FSavedMove_TopDown::PrepMoveFor(ACharacter* C)
 		CMC->bWantsToDash = bWantsToDash;
 		CMC->DashActiveRemaining = SavedDashActiveRemaining;
 		CMC->DashRemainingCooldown = SavedDashRemainingCooldown;
+		CMC->CurrentStamina = SavedCurrentStamina;
+		CMC->StaminaRecoveryRemainingCooldown = SavedStaminaRecoveryRemainingCooldown;
+		CMC->bStaminaExhausted = bStaminaExhausted;
 	}
 }
 
@@ -58,10 +65,13 @@ void FSavedMove_TopDown::PrepMoveFor(ACharacter* C)
 bool FSavedMove_TopDown::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
 {
 	const FSavedMove_TopDown* SavedMove = static_cast<const FSavedMove_TopDown*>(NewMove.Get());
-	if (SavedMove->bWantsToSprint == bWantsToSprint && SavedMove->bWantsToDash == bWantsToDash)
+	if (SavedMove->bWantsToSprint == bWantsToSprint && 
+		SavedMove->bWantsToDash == bWantsToDash && 
+		SavedMove->bStaminaExhausted == bStaminaExhausted)
 	{
 		return Super::CanCombineWith(NewMove, InCharacter, MaxDelta);
 	}
+		
 	return false;
 }
 
@@ -92,6 +102,22 @@ void FSavedMove_TopDown::CombineWith(const FSavedMove_Character* OldMove, AChara
 		const FSavedMove_TopDown* TopDownOldMove = static_cast<const FSavedMove_TopDown*>(OldMove);
 		CMC->DashActiveRemaining = TopDownOldMove->SavedDashActiveRemaining;
 		CMC->DashRemainingCooldown = TopDownOldMove->SavedDashRemainingCooldown;
+		CMC->CurrentStamina = TopDownOldMove->SavedCurrentStamina;
+		CMC->StaminaRecoveryRemainingCooldown = TopDownOldMove->SavedStaminaRecoveryRemainingCooldown;
+		CMC->bStaminaExhausted = TopDownOldMove->bStaminaExhausted;
+	}
+}
+
+void FSavedMove_TopDown::SetInitialPosition(ACharacter* C)
+{
+	FSavedMove_Character::SetInitialPosition(C);
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(C->GetCharacterMovement()))
+	{
+		SavedDashActiveRemaining = CMC->DashActiveRemaining;
+		SavedDashRemainingCooldown = CMC->DashRemainingCooldown;
+		SavedCurrentStamina = CMC->CurrentStamina;
+		SavedStaminaRecoveryRemainingCooldown = CMC->StaminaRecoveryRemainingCooldown;
+		bStaminaExhausted = CMC->bStaminaExhausted;
 	}
 }
 
@@ -111,6 +137,9 @@ UTopDownCMC::UTopDownCMC()
 	{
 		CorrectionHistory[i] = 0.0;
 	}
+	bWantsToSprint = false;
+	bWantsToDash = false;
+	bStaminaExhausted = false;
 }
 
 void UTopDownCMC::SetSprinting(const bool IsSprinting)
@@ -131,9 +160,14 @@ float UTopDownCMC::GetMaxSpeed() const
 		{
 			return DashSpeed;
 		}
-		return bWantsToSprint ? MaxSprintSpeed : Super::GetMaxSpeed();
+		return IsSprinting() ? MaxSprintSpeed : Super::GetMaxSpeed();
 	}
 	return Super::GetMaxSpeed();
+}
+
+float UTopDownCMC::GetCurrentStamina() const
+{
+	return CurrentStamina;
 }
 
 void UTopDownCMC::UpdateFromCompressedFlags(uint8 Flags)
@@ -165,6 +199,11 @@ bool UTopDownCMC::CanDash() const
 	{
 		return false;
 	}
+	// we are not checking 'bStaminaExhausted' because we want to be able to dash even though we are exhausted.
+	if (CurrentStamina < DashStaminaCost)
+	{
+		return false;
+	}
 	return true;
 }
 
@@ -183,6 +222,31 @@ void UTopDownCMC::Dash()
 	Velocity = DashDirection * DashSpeed;
 	DashRemainingCooldown = DashCooldownDuration;
 	DashActiveRemaining = DashActiveDuration;
+	SpendStamina(DashStaminaCost);
+}
+
+bool UTopDownCMC::IsSprinting() const
+{
+	return bWantsToSprint && !bStaminaExhausted && Acceleration.SizeSquared2D() > 0.f;
+}
+
+void UTopDownCMC::SpendStamina(float StaminaCost)
+{
+	StaminaRecoveryRemainingCooldown = StaminaRecoveryDelay;
+	CurrentStamina = FMath::Clamp(CurrentStamina - StaminaCost, 0.f, MaxStamina);
+	if (CurrentStamina < KINDA_SMALL_NUMBER)
+	{
+		bStaminaExhausted = true;
+	}
+}
+
+void UTopDownCMC::RecoverStamina(float DeltaSeconds)
+{
+	CurrentStamina = FMath::Clamp(CurrentStamina + StaminaRecoveryRate * DeltaSeconds, 0.f, MaxStamina);
+	if (CurrentStamina > StaminaExhaustionRecoveryThreshold)
+	{
+		bStaminaExhausted = false;
+	}
 }
 
 void UTopDownCMC::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
@@ -190,6 +254,18 @@ void UTopDownCMC::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
 	if (CharacterOwner->GetLocalRole() != ROLE_SimulatedProxy)
 	{
+		if (IsSprinting())
+		{
+			SpendStamina(StaminaSprintDrainRate * DeltaSeconds);
+		}
+		if (StaminaRecoveryRemainingCooldown > 0.f)
+		{
+			StaminaRecoveryRemainingCooldown -= DeltaSeconds;
+		}
+		else
+		{
+			RecoverStamina(DeltaSeconds);
+		}
 		if (DashRemainingCooldown > 0)
 		{
 			DashRemainingCooldown -= DeltaSeconds;
@@ -223,6 +299,12 @@ void UTopDownCMC::ApplyVelocityBraking(float DeltaTime, float Friction, float Br
 		return Super::ApplyVelocityBraking(DeltaTime, 0.f, BrakingDeceleration);
 	}
 	Super::ApplyVelocityBraking(DeltaTime, Friction, BrakingDeceleration);
+}
+
+void UTopDownCMC::BeginPlay()
+{
+	Super::BeginPlay();
+	CurrentStamina = MaxStamina;
 }
 
 int32 UTopDownCMC::LastSecondCorrectionCount() const
