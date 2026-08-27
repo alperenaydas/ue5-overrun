@@ -48,6 +48,7 @@ void AOverrunHUD::DrawHUD()
 
             Lines.Emplace(FString::Printf(TEXT("Corrections: %d /s"), Corrections), CorrectionColor);
             Lines.Emplace(FString::Printf(TEXT("Last error distance %.2f cm"), CMC->LastComputedCorrectionDistance), CorrectionColor);
+            Lines.Emplace(FString::Printf(TEXT("Movement Mode: %s"), *CMC->GetMovementName()), FLinearColor::White);
         }
     }
 

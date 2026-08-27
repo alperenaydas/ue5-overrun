@@ -17,12 +17,15 @@ public:
 	
 	uint8 bWantsToSprint : 1;
 	uint8 bWantsToDash : 1;
+	float SavedDashActiveRemaining = 0.f;
+	float SavedDashRemainingCooldown = 0.f;
 	
 	virtual void Clear() override;
 	virtual void SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, class FNetworkPredictionData_Client_Character& ClientData) override;
 	virtual void PrepMoveFor(ACharacter* C) override;
 	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override;
 	virtual uint8 GetCompressedFlags() const override;
+	virtual void CombineWith(const FSavedMove_Character* OldMove, ACharacter* InCharacter, APlayerController* PC, const FVector& OldStartLocation) override;
 };
 
 class FNetworkPredictionData_Client_TopDown : public FNetworkPredictionData_Client_Character
@@ -46,18 +49,23 @@ class OVERRUN_API UTopDownCMC : public UCharacterMovementComponent
 	friend class FSavedMove_TopDown;
 public:
 	UTopDownCMC();
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditDefaultsOnly, Category="Custom Movement")
 	float MaxSprintSpeed = 1000.f;
-	UPROPERTY(EditDefaultsOnly)
-	float DashImpulseValue = 10000.f;
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditDefaultsOnly, Category="Custom Movement")
+	float MaxDashBrakingDeceleration = 2500.f;
+	UPROPERTY(EditDefaultsOnly, Category="Custom Movement")
+	float DashSpeed = 2500.f;
+	UPROPERTY(EditDefaultsOnly, Category="Custom Movement")
 	float DashCooldownDuration = 1.f;
+	UPROPERTY(EditDefaultsOnly, Category="Custom Movement")
+	float DashActiveDuration = 0.2f;
 
 	
 private:
 	uint8 bWantsToSprint : 1;
 	uint8 bWantsToDash : 1;
 	float DashRemainingCooldown = 0.f;
+	float DashActiveRemaining = 0.f;
 	// if more than 64 corrections in single second, we are underreporting.
 	static constexpr int32 CorrectionHistorySize = 64;
 	double CorrectionHistory[CorrectionHistorySize];
@@ -77,5 +85,6 @@ protected:
 	bool CanDash() const;
 	void Dash();
 	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
-	
+	virtual float GetMaxBrakingDeceleration() const override;
+	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 };
