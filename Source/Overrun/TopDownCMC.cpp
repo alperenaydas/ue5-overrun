@@ -52,11 +52,6 @@ void FSavedMove_TopDown::PrepMoveFor(ACharacter* C)
 	{
 		CMC->bWantsToSprint = bWantsToSprint;
 		CMC->bWantsToDash = bWantsToDash;
-		CMC->DashActiveRemaining = SavedDashActiveRemaining;
-		CMC->DashRemainingCooldown = SavedDashRemainingCooldown;
-		CMC->CurrentStamina = SavedCurrentStamina;
-		CMC->StaminaRecoveryRemainingCooldown = SavedStaminaRecoveryRemainingCooldown;
-		CMC->bStaminaExhausted = bStaminaExhausted;
 	}
 }
 
@@ -101,7 +96,7 @@ void FSavedMove_TopDown::CombineWith(const FSavedMove_Character* OldMove, AChara
 	{
 		const FSavedMove_TopDown* TopDownOldMove = static_cast<const FSavedMove_TopDown*>(OldMove);
 		CMC->DashActiveRemaining = TopDownOldMove->SavedDashActiveRemaining;
-		CMC->DashRemainingCooldown = TopDownOldMove->SavedDashRemainingCooldown;
+		CMC->DashCooldownRemaining = TopDownOldMove->SavedDashRemainingCooldown;
 		CMC->CurrentStamina = TopDownOldMove->SavedCurrentStamina;
 		CMC->StaminaRecoveryRemainingCooldown = TopDownOldMove->SavedStaminaRecoveryRemainingCooldown;
 		CMC->bStaminaExhausted = TopDownOldMove->bStaminaExhausted;
@@ -114,7 +109,7 @@ void FSavedMove_TopDown::SetInitialPosition(ACharacter* C)
 	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(C->GetCharacterMovement()))
 	{
 		SavedDashActiveRemaining = CMC->DashActiveRemaining;
-		SavedDashRemainingCooldown = CMC->DashRemainingCooldown;
+		SavedDashRemainingCooldown = CMC->DashCooldownRemaining;
 		SavedCurrentStamina = CMC->CurrentStamina;
 		SavedStaminaRecoveryRemainingCooldown = CMC->StaminaRecoveryRemainingCooldown;
 		bStaminaExhausted = CMC->bStaminaExhausted;
@@ -131,6 +126,39 @@ FSavedMovePtr FNetworkPredictionData_Client_TopDown::AllocateNewMove()
 	return FSavedMovePtr(new FSavedMove_TopDown());
 }
 
+FCharacterMoveResponseDataContainerWithTopDownAdditions::FCharacterMoveResponseDataContainerWithTopDownAdditions() : Super()
+{
+	
+}
+
+void FCharacterMoveResponseDataContainerWithTopDownAdditions::ServerFillResponseData(
+	const UCharacterMovementComponent& CharacterMovement, const FClientAdjustment& PendingAdjustment)
+{
+	FCharacterMoveResponseDataContainer::ServerFillResponseData(CharacterMovement, PendingAdjustment);
+	// Custom fields are sampled in ServerMoveHandleClientError, at the moment the adjustment is created — so they
+	// match the adjustment's timestamp. Do NOT resample live state here: by send time the server may have simulated 
+	// past the corrected move, and time-inconsistent data re-poisons every correction.
+}
+
+bool FCharacterMoveResponseDataContainerWithTopDownAdditions::Serialize(UCharacterMovementComponent& CharacterMovement,
+	FArchive& Ar, UPackageMap* PackageMap)
+{
+	if (!FCharacterMoveResponseDataContainer::Serialize(CharacterMovement, Ar, PackageMap))
+	{
+		return false;
+	}
+	if (IsCorrection())
+	{
+		Ar << ResponseCurrentStamina;
+		Ar << ResponseStaminaRecoveryRemainingCooldown;
+		Ar << ResponseDashActiveRemaining;
+		Ar << ResponseDashCooldownRemaining;
+		Ar.SerializeBits(&bResponseStaminaExhausted, 1);
+	}
+	return !Ar.IsError();
+	
+}
+
 UTopDownCMC::UTopDownCMC()
 {
 	for (int i = 0; i < CorrectionHistorySize; i++)
@@ -140,6 +168,7 @@ UTopDownCMC::UTopDownCMC()
 	bWantsToSprint = false;
 	bWantsToDash = false;
 	bStaminaExhausted = false;
+	SetMoveResponseDataContainer(TopDownMoveResponseDataContainer);
 }
 
 void UTopDownCMC::SetSprinting(const bool IsSprinting)
@@ -188,6 +217,12 @@ void UTopDownCMC::OnClientCorrectionReceived(class FNetworkPredictionData_Client
 		CorrectionHistory[CorrectionHistoryIndex] = FPlatformTime::Seconds(); // Save the time to show the count of last second
 		CorrectionHistoryIndex = (CorrectionHistoryIndex + 1) % CorrectionHistorySize;
 	}
+	CurrentStamina = TopDownMoveResponseDataContainer.ResponseCurrentStamina;
+	StaminaRecoveryRemainingCooldown = TopDownMoveResponseDataContainer.ResponseStaminaRecoveryRemainingCooldown;
+	DashActiveRemaining = TopDownMoveResponseDataContainer.ResponseDashActiveRemaining;
+	DashCooldownRemaining = TopDownMoveResponseDataContainer.ResponseDashCooldownRemaining;
+	bStaminaExhausted = TopDownMoveResponseDataContainer.bResponseStaminaExhausted;
+
 	Super::OnClientCorrectionReceived(ClientData, TimeStamp, NewLocation, NewVelocity, NewBase, NewBaseBoneName,
 	                                  bHasBase, bBaseRelativePosition,
 	                                  ServerMovementMode, ServerGravityDirection);
@@ -195,7 +230,7 @@ void UTopDownCMC::OnClientCorrectionReceived(class FNetworkPredictionData_Client
 
 bool UTopDownCMC::CanDash() const
 {
-	if (MovementMode != MOVE_Walking || DashRemainingCooldown > 0)
+	if (MovementMode != MOVE_Walking || DashCooldownRemaining > 0)
 	{
 		return false;
 	}
@@ -220,7 +255,7 @@ void UTopDownCMC::Dash()
 		DashDirection = Acceleration.GetSafeNormal2D();
 	}
 	Velocity = DashDirection * DashSpeed;
-	DashRemainingCooldown = DashCooldownDuration;
+	DashCooldownRemaining = DashCooldownDuration;
 	DashActiveRemaining = DashActiveDuration;
 	SpendStamina(DashStaminaCost);
 }
@@ -266,9 +301,9 @@ void UTopDownCMC::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 		{
 			RecoverStamina(DeltaSeconds);
 		}
-		if (DashRemainingCooldown > 0)
+		if (DashCooldownRemaining > 0)
 		{
-			DashRemainingCooldown -= DeltaSeconds;
+			DashCooldownRemaining -= DeltaSeconds;
 		}
 		if (DashActiveRemaining > 0)
 		{
@@ -305,6 +340,24 @@ void UTopDownCMC::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentStamina = MaxStamina;
+}
+
+void UTopDownCMC::ServerMoveHandleClientError(float ClientTimeStamp, float DeltaTime, const FVector& Accel,
+	const FVector& RelativeClientLocation, UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName,
+	uint8 ClientMovementMode)
+{
+	Super::ServerMoveHandleClientError(ClientTimeStamp, DeltaTime, Accel, RelativeClientLocation, ClientMovementBase,
+	                                   ClientBaseBoneName,
+	                                   ClientMovementMode);
+	FClientAdjustment Adjustment = GetPredictionData_Server_Character()->PendingAdjustment;
+	if (Adjustment.TimeStamp == ClientTimeStamp && !Adjustment.bAckGoodMove)
+	{
+		TopDownMoveResponseDataContainer.ResponseCurrentStamina = CurrentStamina;
+		TopDownMoveResponseDataContainer.ResponseStaminaRecoveryRemainingCooldown = StaminaRecoveryRemainingCooldown;
+		TopDownMoveResponseDataContainer.ResponseDashActiveRemaining = DashActiveRemaining;
+		TopDownMoveResponseDataContainer.ResponseDashCooldownRemaining = DashCooldownRemaining;
+		TopDownMoveResponseDataContainer.bResponseStaminaExhausted = bStaminaExhausted;
+	}
 }
 
 int32 UTopDownCMC::LastSecondCorrectionCount() const

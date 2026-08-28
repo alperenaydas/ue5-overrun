@@ -42,6 +42,24 @@ public:
 	virtual FSavedMovePtr AllocateNewMove() override;
 };
 
+struct FCharacterMoveResponseDataContainerWithTopDownAdditions : public FCharacterMoveResponseDataContainer
+{
+public:
+	typedef FCharacterMoveResponseDataContainer Super;
+	
+	FCharacterMoveResponseDataContainerWithTopDownAdditions();
+	
+	float ResponseCurrentStamina = 0.f;
+	float ResponseStaminaRecoveryRemainingCooldown = 0.f;
+	float ResponseDashActiveRemaining = 0.f;
+	float ResponseDashCooldownRemaining = 0.f;
+	bool bResponseStaminaExhausted = false;
+	
+	virtual void ServerFillResponseData(const UCharacterMovementComponent& CharacterMovement, const FClientAdjustment& PendingAdjustment) override;
+	virtual bool Serialize(UCharacterMovementComponent& CharacterMovement, FArchive& Ar, UPackageMap* PackageMap) override;
+	
+};
+
 /**
  * 
  */
@@ -79,7 +97,7 @@ public:
 private:
 	uint8 bWantsToSprint : 1;
 	uint8 bWantsToDash : 1;
-	float DashRemainingCooldown = 0.f;
+	float DashCooldownRemaining = 0.f;
 	float DashActiveRemaining = 0.f;
 	// if more than 64 corrections in single second, we are underreporting.
 	static constexpr int32 CorrectionHistorySize = 64;
@@ -88,6 +106,8 @@ private:
 	float CurrentStamina = 0.f;
 	float StaminaRecoveryRemainingCooldown = 0.f;
 	uint8 bStaminaExhausted : 1;
+	FCharacterMoveResponseDataContainerWithTopDownAdditions TopDownMoveResponseDataContainer;
+
 	
 public:
 	void SetSprinting(const bool IsSprinting);
@@ -97,6 +117,8 @@ public:
 	int32 LastSecondCorrectionCount() const;
 	float LastComputedCorrectionDistance = 0.f;
 	float GetCurrentStamina() const;
+	
+	
 	
 protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
@@ -110,4 +132,5 @@ protected:
 	virtual float GetMaxBrakingDeceleration() const override;
 	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 	virtual void BeginPlay() override;
+	virtual void ServerMoveHandleClientError(float ClientTimeStamp, float DeltaTime, const FVector& Accel, const FVector& RelativeClientLocation, UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName, uint8 ClientMovementMode) override;
 };
