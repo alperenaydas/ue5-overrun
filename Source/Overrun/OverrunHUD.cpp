@@ -2,6 +2,7 @@
 
 #include "TopDownCMC.h"
 #include "CanvasItem.h"
+#include "OverrunNetDebug.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerState.h"
@@ -21,19 +22,12 @@ void AOverrunHUD::DrawHUD()
         return;
     }
 
+#if !UE_BUILD_SHIPPING
     TArray<TPair<FString, FLinearColor>> Lines;
 
     if (const APawn* OwningPawn = GetOwningPawn())
     {
-        FString RoleText;
-        switch (OwningPawn->GetLocalRole())
-        {
-        case ROLE_Authority:       RoleText = TEXT("AUTHORITY (server)"); break;
-        case ROLE_AutonomousProxy: RoleText = TEXT("AUTONOMOUS");         break;
-        case ROLE_SimulatedProxy:  RoleText = TEXT("SIMULATED");          break;
-        default:                   RoleText = TEXT("NONE");               break;
-        }
-
+        const FString RoleText = GetRoleName(OwningPawn->GetLocalRole());
         Lines.Emplace(FString::Printf(TEXT("Role:        %s"), *RoleText), FLinearColor::White);
         Lines.Emplace(FString::Printf(TEXT("Velocity:    %.0f"), OwningPawn->GetVelocity().Size2D()),
                       FLinearColor::White);
@@ -88,4 +82,5 @@ void AOverrunHUD::DrawHUD()
         Canvas->DrawItem(TextItem);
         Y += LineHeight;
     }
+#endif
 }

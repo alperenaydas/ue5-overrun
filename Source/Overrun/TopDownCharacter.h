@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
 #include "TopDownCharacter.generated.h"
 
@@ -11,7 +12,7 @@ class USpringArmComponent;
 struct FInputActionValue;
 
 UCLASS()
-class OVERRUN_API ATopDownCharacter : public ACharacter
+class OVERRUN_API ATopDownCharacter : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -36,12 +37,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> DashAction;
 
-protected:
-	virtual void BeginPlay() override;
-
 public:
+	virtual void BeginPlay() override;
 	virtual void PawnClientRestart() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Locomotion")
 	double GetGroundSpeed() const;

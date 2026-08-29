@@ -3,11 +3,14 @@
 
 #include "TopDownCharacter.h"
 
+#include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "KismetAnimationLibrary.h"
+#include "OverrunNetDebug.h"
 #include "TopDownCMC.h"
+#include "TopDownPlayerState.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/LocalPlayer.h"
@@ -94,6 +97,44 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EIC->BindAction(DashAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDashActionStarted);
 		}
+	}
+}
+
+UAbilitySystemComponent* ATopDownCharacter::GetAbilitySystemComponent() const
+{
+	if (const ATopDownPlayerState* PS = Cast<ATopDownPlayerState>(GetPlayerState()))
+	{
+		return PS->GetAbilitySystemComponent();
+	}
+	return nullptr;
+}
+
+void ATopDownCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (ensureMsgf(ASC, TEXT("PossessedBy: no ASC on %s — PlayerState missing or not ATopDownPlayerState (%s)"), *GetName(), *GetNameSafe(GetPlayerState())))
+	{
+		ASC->InitAbilityActorInfo(GetPlayerState(), this);
+#if !UE_BUILD_SHIPPING
+		UE_LOG(LogAbilitySystemComponent, Display, TEXT("Ability System Component initialized for %s on server which's role is %s and id is %d."), *GetFullName(), *GetRoleName(GetLocalRole()), GetPlayerState()->GetPlayerId());
+#endif
+	}
+}
+
+void ATopDownCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		ASC->InitAbilityActorInfo(GetPlayerState(), this);
+#if !UE_BUILD_SHIPPING
+		UE_LOG(LogAbilitySystemComponent, Display, TEXT("Ability System Component initialized for %s on client which's role is %s and id is %d."), *GetFullName(), *GetRoleName(GetLocalRole()), GetPlayerState()->GetPlayerId());
+#endif
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("OnRep_PlayerState: ASC not ready on %s — PlayerState actor not replicated yet, expecting a later notify."), *GetName());
 	}
 }
 
