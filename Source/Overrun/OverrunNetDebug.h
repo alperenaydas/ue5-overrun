@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayAbilitySpec.h"
 
 #if !UE_BUILD_SHIPPING
 
@@ -17,6 +18,21 @@ inline FString GetRoleName(const ENetRole Role)
 	default:                   RoleText = TEXT("NONE");               break;
 	}
 	return RoleText;
+}
+
+inline FString GetActivationModeName(const EGameplayAbilityActivationMode::Type ActivationMode)
+{
+	FString ActivationModeText;
+	switch (ActivationMode)
+	{
+	case EGameplayAbilityActivationMode::Authority:      ActivationModeText = TEXT("AUTHORITY (server)"); break;
+	case EGameplayAbilityActivationMode::NonAuthority:   ActivationModeText = TEXT("NON-AUTHORITY");      break;
+	case EGameplayAbilityActivationMode::Predicting:     ActivationModeText = TEXT("PREDICTING");         break;
+	case EGameplayAbilityActivationMode::Confirmed:      ActivationModeText = TEXT("CONFIRMED");          break;
+	case EGameplayAbilityActivationMode::Rejected:       ActivationModeText = TEXT("REJECTED");           break;
+	default:                                             ActivationModeText = TEXT("UNKNOWN");            break;
+	}
+	return ActivationModeText;
 }
 
 #endif

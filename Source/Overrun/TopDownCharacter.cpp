@@ -119,6 +119,12 @@ void ATopDownCharacter::PossessedBy(AController* NewController)
 #if !UE_BUILD_SHIPPING
 		UE_LOG(LogAbilitySystemComponent, Display, TEXT("Ability System Component initialized for %s on server which's role is %s and id is %d."), *GetFullName(), *GetRoleName(GetLocalRole()), GetPlayerState()->GetPlayerId());
 #endif
+		// Ability may be given on previous PossessedBy so this is double guard.
+		if (!ASC->FindAbilitySpecFromClass(SprintAbility))
+		{
+			FGameplayAbilitySpec SprintAbilitySpec = FGameplayAbilitySpec(SprintAbility);
+			ASC->GiveAbility(SprintAbilitySpec);
+		}
 	}
 }
 
@@ -161,9 +167,9 @@ void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnSprintActionStarted(const FInputActionValue& Value)
 {
-	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetCharacterMovement()))
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
-		CMC->SetSprinting(true);
+		ASC->TryActivateAbilityByClass(SprintAbility);
 	}
 }
 

@@ -5,6 +5,7 @@
 #include "GameFramework/Character.h"
 #include "TopDownCharacter.generated.h"
 
+class UGameplayAbility;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -36,6 +37,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> DashAction;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS")
+	TSubclassOf<UGameplayAbility> SprintAbility;
 
 public:
 	virtual void BeginPlay() override;
