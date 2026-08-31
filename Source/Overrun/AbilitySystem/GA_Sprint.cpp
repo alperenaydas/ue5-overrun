@@ -4,7 +4,7 @@
 #include "GA_Sprint.h"
 
 #include "OverrunGameplayTags.h"
-#include "TopDownCMC.h"
+#include "../Movement/TopDownCMC.h"
 
 UGA_Sprint::UGA_Sprint()
 {
