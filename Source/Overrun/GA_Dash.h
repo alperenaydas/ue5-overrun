@@ -4,18 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "OverrunMovementAbility.h"
-#include "GA_Sprint.generated.h"
+#include "GA_Dash.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class OVERRUN_API UGA_Sprint : public UOverrunMovementAbility
+class OVERRUN_API UGA_Dash : public UOverrunMovementAbility
 {
 	GENERATED_BODY()
 public:
-	UGA_Sprint();
-	
+	UGA_Dash();
+
 protected:
 	virtual void ActivateMovementAbility(UTopDownCMC* CMC) override;
 };

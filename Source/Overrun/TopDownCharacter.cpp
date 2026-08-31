@@ -8,6 +8,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "KismetAnimationLibrary.h"
+#include "OverrunGameplayTags.h"
+#include "OverrunHelper.h"
 #include "OverrunNetDebug.h"
 #include "TopDownCMC.h"
 #include "TopDownPlayerState.h"
@@ -119,11 +121,17 @@ void ATopDownCharacter::PossessedBy(AController* NewController)
 #if !UE_BUILD_SHIPPING
 		UE_LOG(LogAbilitySystemComponent, Display, TEXT("Ability System Component initialized for %s on server which's role is %s and id is %d."), *GetFullName(), *GetRoleName(GetLocalRole()), GetPlayerState()->GetPlayerId());
 #endif
-		// Ability may be given on previous PossessedBy so this is double guard.
-		if (!ASC->FindAbilitySpecFromClass(SprintAbility))
+		for (const TSubclassOf<UGameplayAbility>& Ability : DefaultAbilities)
 		{
-			FGameplayAbilitySpec SprintAbilitySpec = FGameplayAbilitySpec(SprintAbility);
-			ASC->GiveAbility(SprintAbilitySpec);
+			if (ensureMsgf(Ability, TEXT("PossessedBy: Missing ability on %s. Double check the blueprint."), *GetName()))
+			{
+				// Ability may be given on previous PossessedBy so this is double guard.
+				if (!ASC->FindAbilitySpecFromClass(Ability))
+				{
+					FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(Ability);
+					ASC->GiveAbility(AbilitySpec);
+				}
+			}
 		}
 	}
 }
@@ -167,10 +175,7 @@ void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnSprintActionStarted(const FInputActionValue& Value)
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		ASC->TryActivateAbilityByClass(SprintAbility);
-	}
+	OverrunHelper::TryActivateAbilityByTag(GetAbilitySystemComponent(), TAG_Ability_Sprint);
 }
 
 void ATopDownCharacter::OnSprintActionCompleted(const FInputActionValue& Value)
@@ -183,8 +188,5 @@ void ATopDownCharacter::OnSprintActionCompleted(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnDashActionStarted(const FInputActionValue& Value)
 {
-	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetCharacterMovement()))
-	{
-		CMC->TriggerDashing();
-	}
+	OverrunHelper::TryActivateAbilityByTag(GetAbilitySystemComponent(), TAG_Ability_Dash);
 }

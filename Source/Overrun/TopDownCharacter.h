@@ -39,7 +39,7 @@ public:
 	TObjectPtr<UInputAction> DashAction;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
-	TSubclassOf<UGameplayAbility> SprintAbility;
+	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
 
 public:
 	virtual void BeginPlay() override;
