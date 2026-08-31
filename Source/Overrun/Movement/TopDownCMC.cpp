@@ -3,7 +3,10 @@
 
 #include "TopDownCMC.h"
 
+#include "AbilitySystemComponent.h"
 #include "GameFramework/Character.h"
+#include "Overrun/AbilitySystem/OverrunAttributeSet.h"
+#include "Overrun/Character/TopDownCharacter.h"
 
 FSavedMove_TopDown::FSavedMove_TopDown() : Super()
 {
@@ -314,6 +317,16 @@ void UTopDownCMC::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 			Dash();
 		}
 		bWantsToDash = false;
+		if (CharacterOwner->GetLocalRole() == ROLE_Authority)
+		{
+			if (ATopDownCharacter* TopDownCharacter = Cast<ATopDownCharacter>(CharacterOwner))
+			{
+				if (UAbilitySystemComponent* ASC = TopDownCharacter->GetAbilitySystemComponent())
+				{
+					ASC->SetNumericAttributeBase(UOverrunAttributeSet::GetStaminaAttribute(), CurrentStamina);
+				}
+			}
+		}
 	}
 }
 

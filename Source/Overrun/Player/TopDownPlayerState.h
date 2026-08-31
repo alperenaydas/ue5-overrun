@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerState.h"
 #include "TopDownPlayerState.generated.h"
 
+class UOverrunAttributeSet;
 class UAbilitySystemComponent;
 /**
  * 
@@ -23,4 +24,7 @@ public:
 public:
 	UPROPERTY()
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
+	UPROPERTY()
+	TObjectPtr<UOverrunAttributeSet> OverrunAttributeSet;
 };

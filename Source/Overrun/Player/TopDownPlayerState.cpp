@@ -4,6 +4,7 @@
 #include "TopDownPlayerState.h"
 
 #include "AbilitySystemComponent.h"
+#include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 
 ATopDownPlayerState::ATopDownPlayerState()
 {
@@ -13,6 +14,8 @@ ATopDownPlayerState::ATopDownPlayerState()
 	
 	SetNetUpdateFrequency(60.0f);
 	SetMinNetUpdateFrequency(30.0f);
+	
+	OverrunAttributeSet = CreateDefaultSubobject<UOverrunAttributeSet>(TEXT("OverrunAttributeSet"));
 }
 
 UAbilitySystemComponent* ATopDownPlayerState::GetAbilitySystemComponent() const

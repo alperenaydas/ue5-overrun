@@ -2,10 +2,13 @@
 
 #include "../Movement/TopDownCMC.h"
 #include "CanvasItem.h"
+#include "EngineUtils.h"
 #include "OverrunNetDebug.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerState.h"
+#include "Overrun/AbilitySystem/OverrunAttributeSet.h"
+#include "Overrun/Character/TopDownCharacter.h"
 
 void AOverrunHUD::DrawHUD()
 {
@@ -44,6 +47,27 @@ void AOverrunHUD::DrawHUD()
             Lines.Emplace(FString::Printf(TEXT("Last error distance %.2f cm"), CMC->LastComputedCorrectionDistance), CorrectionColor);
             Lines.Emplace(FString::Printf(TEXT("Movement Mode: %s"), *CMC->GetMovementName()), FLinearColor::White);
             Lines.Emplace(FString::Printf(TEXT("Stamina: %.2f/%.2f"), CMC->GetCurrentStamina(), CMC->MaxStamina), FLinearColor::White);
+            if (const ATopDownCharacter* TopDownCharacter = Cast<ATopDownCharacter>(OwningPawn))
+            {
+                if (const UAbilitySystemComponent* ASC = TopDownCharacter->GetAbilitySystemComponent())
+                {
+                    Lines.Emplace(FString::Printf(TEXT("Attr Stamina: %.2f/%.2f"), ASC->GetNumericAttribute(UOverrunAttributeSet::GetStaminaAttribute()), CMC->MaxStamina), FLinearColor::White);
+                }
+            }
+        }
+        for (TActorIterator<ATopDownCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
+        {
+            if (const ATopDownCharacter* TopDownCharacter = *Iterator)
+            {
+                if (TopDownCharacter == OwningPawn) { continue; }
+                if (const UAbilitySystemComponent* ASC = TopDownCharacter->GetAbilitySystemComponent())
+                {
+                    if (const APlayerState* PS = TopDownCharacter->GetPlayerState())
+                    {
+                        Lines.Emplace(FString::Printf(TEXT("Stamina of %d: %.2f"), PS->GetPlayerId(), ASC->GetNumericAttribute(UOverrunAttributeSet::GetStaminaAttribute())), FLinearColor::White);
+                    }
+                }
+            }
         }
     }
 
