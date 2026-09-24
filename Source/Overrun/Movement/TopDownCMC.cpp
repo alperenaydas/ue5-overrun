@@ -202,6 +202,12 @@ float UTopDownCMC::GetCurrentStamina() const
 	return CurrentStamina;
 }
 
+void UTopDownCMC::ClearCustomIntents()
+{
+	bWantsToSprint = false;
+	bWantsToDash = false;
+}
+
 void UTopDownCMC::UpdateFromCompressedFlags(uint8 Flags)
 {
 	Super::UpdateFromCompressedFlags(Flags);

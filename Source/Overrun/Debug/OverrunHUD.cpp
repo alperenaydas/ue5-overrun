@@ -52,6 +52,7 @@ void AOverrunHUD::DrawHUD()
                 if (const UAbilitySystemComponent* ASC = TopDownCharacter->GetAbilitySystemComponent())
                 {
                     Lines.Emplace(FString::Printf(TEXT("Attr Stamina: %.2f/%.2f"), ASC->GetNumericAttribute(UOverrunAttributeSet::GetStaminaAttribute()), CMC->MaxStamina), FLinearColor::White);
+                    Lines.Emplace(FString::Printf(TEXT("Attr Health: %.2f/%.2f"), ASC->GetNumericAttribute(UOverrunAttributeSet::GetHealthAttribute()), ASC->GetNumericAttribute(UOverrunAttributeSet::GetMaxHealthAttribute())), FLinearColor::White);
                 }
             }
         }
@@ -65,6 +66,7 @@ void AOverrunHUD::DrawHUD()
                     if (const APlayerState* PS = TopDownCharacter->GetPlayerState())
                     {
                         Lines.Emplace(FString::Printf(TEXT("Stamina of %d: %.2f"), PS->GetPlayerId(), ASC->GetNumericAttribute(UOverrunAttributeSet::GetStaminaAttribute())), FLinearColor::White);
+                        Lines.Emplace(FString::Printf(TEXT("Health of %d: %.2f"), PS->GetPlayerId(), ASC->GetNumericAttribute(UOverrunAttributeSet::GetHealthAttribute())), FLinearColor::White);
                     }
                 }
             }

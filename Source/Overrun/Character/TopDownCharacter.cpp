@@ -9,6 +9,7 @@
 #include "InputActionValue.h"
 #include "KismetAnimationLibrary.h"
 #include "Overrun/AbilitySystem/OverrunGameplayTags.h"
+#include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 #include "Overrun/OverrunHelper.h"
 #include "Overrun/Debug/OverrunNetDebug.h"
 #include "Overrun/Movement/TopDownCMC.h"
@@ -99,6 +100,10 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EIC->BindAction(DashAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDashActionStarted);
 		}
+		if (DamageAction)
+		{
+			EIC->BindAction(DamageAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDamageActionStarted);
+		}
 	}
 }
 
@@ -133,6 +138,9 @@ void ATopDownCharacter::PossessedBy(AController* NewController)
 				}
 			}
 		}
+		// Runs on every possession, resets per-life state on respawn
+		ASC->SetNumericAttributeBase(UOverrunAttributeSet::GetMaxHealthAttribute(), DefaultMaxHealth);
+		ASC->SetNumericAttributeBase(UOverrunAttributeSet::GetHealthAttribute(), DefaultMaxHealth);
 	}
 }
 
@@ -162,8 +170,36 @@ float ATopDownCharacter::GetLocomotionDirection() const
 	return UKismetAnimationLibrary::CalculateDirection(GetVelocity(), GetActorRotation());
 }
 
+void ATopDownCharacter::ApplyTestDamage_Implementation()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayEffectContextHandle GEContextHandle = ASC->MakeEffectContext();
+		FGameplayEffectSpecHandle GESpecHandle = ASC->MakeOutgoingSpec(DamageEffect, 1, GEContextHandle);
+		if (GESpecHandle.IsValid())
+		{
+			ASC->ApplyGameplayEffectSpecToSelf(*GESpecHandle.Data.Get());
+		}
+		else
+		{
+			UE_LOG(LogAbilitySystemComponent, Error, TEXT("holy shit ge spec handle is not valid"));
+		}
+	}
+}
+
+void ATopDownCharacter::EnterDeadTransition() const
+{
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetMovementComponent()))
+	{
+		CMC->DisableMovement();
+		CMC->SetSprinting(false);
+		CMC->ClearCustomIntents();
+	}
+}
+
 void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 {
+	if (IsDead()) return;
 	const FVector2D MoveInput = Value.Get<FVector2D>();
 
 	// World axes on purpose: the camera boom's yaw is pinned to 0, so screen axes and
@@ -175,6 +211,7 @@ void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnSprintActionStarted(const FInputActionValue& Value)
 {
+	if (IsDead()) return;
 	OverrunHelper::TryActivateAbilityByTag(GetAbilitySystemComponent(), TAG_Ability_Sprint);
 }
 
@@ -188,5 +225,20 @@ void ATopDownCharacter::OnSprintActionCompleted(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnDashActionStarted(const FInputActionValue& Value)
 {
+	if (IsDead()) return;
 	OverrunHelper::TryActivateAbilityByTag(GetAbilitySystemComponent(), TAG_Ability_Dash);
+}
+
+void ATopDownCharacter::OnDamageActionStarted(const FInputActionValue& Value)
+{
+	ApplyTestDamage();
+}
+
+bool ATopDownCharacter::IsDead() const
+{
+	if (const ATopDownPlayerState* PS = Cast<ATopDownPlayerState>(GetPlayerState()))
+	{
+		if (PS->IsDead) return true;
+	}
+	return false;
 }

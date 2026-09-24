@@ -20,6 +20,8 @@ class OVERRUN_API ATopDownPlayerState : public APlayerState, public IAbilitySyst
 public:
 	ATopDownPlayerState();
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	void SetDeadState(bool isDead);
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 public:
 	UPROPERTY()
@@ -27,4 +29,13 @@ public:
 	
 	UPROPERTY()
 	TObjectPtr<UOverrunAttributeSet> OverrunAttributeSet;
+	
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_IsDead)
+	bool IsDead = false;
+	
+private:
+	UFUNCTION()
+	void OnRep_IsDead(bool bOldIsDead) const;
+	
+	void CharacterEnterDeadTransition() const;
 };

@@ -117,6 +117,7 @@ public:
 	int32 LastSecondCorrectionCount() const;
 	float LastComputedCorrectionDistance = 0.f;
 	float GetCurrentStamina() const;
+	void ClearCustomIntents();
 	
 	
 	
