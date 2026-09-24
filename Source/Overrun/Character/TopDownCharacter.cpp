@@ -170,21 +170,48 @@ float ATopDownCharacter::GetLocomotionDirection() const
 	return UKismetAnimationLibrary::CalculateDirection(GetVelocity(), GetActorRotation());
 }
 
-void ATopDownCharacter::ApplyTestDamage_Implementation()
+void ATopDownCharacter::ShootWeapon_Implementation()
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	if (IsDead()) return;
+	FVector CharacterPosition = GetActorLocation();
+	FVector Forward = GetControlRotation().Vector();
+	FHitResult Hit;
+	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
+	CollisionParams.AddIgnoredActor(this);
+	CollisionParams.bTraceComplex = false;
+	GetWorld()->LineTraceSingleByChannel(Hit, CharacterPosition, CharacterPosition + Forward * 2000, ECC_Visibility, CollisionParams);
+	if (Hit.bBlockingHit)
 	{
-		FGameplayEffectContextHandle GEContextHandle = ASC->MakeEffectContext();
-		FGameplayEffectSpecHandle GESpecHandle = ASC->MakeOutgoingSpec(DamageEffect, 1, GEContextHandle);
-		if (GESpecHandle.IsValid())
+		ClientDrawShotDebug(CharacterPosition, Hit.ImpactPoint);
+		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))
 		{
-			ASC->ApplyGameplayEffectSpecToSelf(*GESpecHandle.Data.Get());
-		}
-		else
-		{
-			UE_LOG(LogAbilitySystemComponent, Error, TEXT("holy shit ge spec handle is not valid"));
+			
+			if (UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent())
+			{
+				if (UAbilitySystemComponent* OwnASC = GetAbilitySystemComponent())
+				{
+					FGameplayEffectContextHandle GEContextHandle = OwnASC->MakeEffectContext();
+					FGameplayEffectSpecHandle GESpecHandle = OwnASC->MakeOutgoingSpec(DamageEffect, 1, GEContextHandle);
+					if (GESpecHandle.IsValid())
+					{
+						OwnASC->ApplyGameplayEffectSpecToTarget(*GESpecHandle.Data.Get(), TargetASC);
+					}
+				}
+			}
 		}
 	}
+	else
+	{
+		ClientDrawShotDebug(CharacterPosition, CharacterPosition + Forward * 2000);
+	}
+	// send ray, check hit, calc damage
+}
+
+void ATopDownCharacter::ClientDrawShotDebug_Implementation(FVector Start, FVector End)
+{
+	DrawDebugSphere(GetWorld(), Start, 20.f, 6, FColor::Green, false, 2.f);
+	DrawDebugLine(GetWorld(), Start, End, FColor::Green, false, 2.f);
+	DrawDebugSphere(GetWorld(), End, 20.f, 6, FColor::Red, false, 2.f);
 }
 
 void ATopDownCharacter::EnterDeadTransition() const
@@ -231,7 +258,7 @@ void ATopDownCharacter::OnDashActionStarted(const FInputActionValue& Value)
 
 void ATopDownCharacter::OnDamageActionStarted(const FInputActionValue& Value)
 {
-	ApplyTestDamage();
+	ShootWeapon();
 }
 
 bool ATopDownCharacter::IsDead() const

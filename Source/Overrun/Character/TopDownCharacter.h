@@ -65,7 +65,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Locomotion")
 	float GetLocomotionDirection() const;
 	UFUNCTION(Server, Reliable)
-	void ApplyTestDamage();
+	void ShootWeapon();
+	UFUNCTION(NetMulticast, Unreliable) // cause its debug
+	void ClientDrawShotDebug(FVector Start, FVector End);
+	
 	void EnterDeadTransition() const;
 
 private:
