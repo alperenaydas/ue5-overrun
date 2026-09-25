@@ -5,9 +5,8 @@
 
 #include "AbilitySystemLog.h"
 #include "GameplayEffectExtension.h"
-#include "GameFramework/PlayerState.h"
+#include "OverrunGameplayTags.h"
 #include "Net/UnrealNetwork.h"
-#include "Overrun/Player/TopDownPlayerState.h"
 
 void UOverrunAttributeSet::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -35,13 +34,10 @@ bool UOverrunAttributeSet::PreGameplayEffectExecute(struct FGameplayEffectModCal
 {
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		if (ATopDownPlayerState* GEOwnerPlayerState = Cast<ATopDownPlayerState>(Data.Target.GetOwner()))
+		if (Data.Target.HasMatchingGameplayTag(TAG_State_Dead))
 		{
-			if (GEOwnerPlayerState->IsDead)
-			{
-				UE_LOG(LogAbilitySystem, Log, TEXT("Player with id: %d is already dead. GameplayEffect is not executable."), GEOwnerPlayerState->GetPlayerId());
-				return false;
-			}
+			UE_LOG(LogAbilitySystem, Log, TEXT("Target has dead tag. GameplayEffect is not executable."));
+			return false;
 		}
 	}
 	

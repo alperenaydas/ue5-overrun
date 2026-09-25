@@ -7,6 +7,7 @@
 #include "AbilitySystemLog.h"
 #include "Net/UnrealNetwork.h"
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
+#include "Overrun/AbilitySystem/OverrunGameplayTags.h"
 #include "Overrun/Character/TopDownCharacter.h"
 
 ATopDownPlayerState::ATopDownPlayerState()
@@ -31,6 +32,7 @@ void ATopDownPlayerState::SetDeadState(bool isDead)
 	if (!HasAuthority() || IsDead == isDead) return;
 	
 	IsDead = isDead;
+	AbilitySystemComponent->SetLooseGameplayTagCount(TAG_State_Dead, IsDead ? 1 : 0);
 	if (isDead)
 	{
 		CharacterEnterDeadTransition();

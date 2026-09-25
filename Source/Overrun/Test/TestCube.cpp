@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
+#include "Overrun/AbilitySystem/OverrunGameplayTags.h"
 
 ATestCube::ATestCube()
 {
@@ -47,9 +48,11 @@ void ATestCube::HandleHealthChanged(const FOnAttributeChangeData& Data)
 {
 	if (HasAuthority())
 	{
+
 		if (Data.OldValue > 0 && Data.NewValue <= 0)
 		{
 			// death
+			AbilitySystemComponent->SetLooseGameplayTagCount(TAG_State_Dead, 1);
 			Destroy();
 		}
 	}
