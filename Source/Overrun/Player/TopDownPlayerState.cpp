@@ -4,6 +4,7 @@
 #include "TopDownPlayerState.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemLog.h"
 #include "Net/UnrealNetwork.h"
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 #include "Overrun/Character/TopDownCharacter.h"
@@ -47,6 +48,18 @@ void ATopDownPlayerState::GetLifetimeReplicatedProps(TArray<class FLifetimePrope
 	
 }
 
+void ATopDownPlayerState::BeginPlay()
+{
+	Super::BeginPlay();
+	if (AbilitySystemComponent)
+	{
+		if (HasAuthority())
+		{
+			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(OverrunAttributeSet->GetHealthAttribute()).AddUObject(this, &ATopDownPlayerState::HandleHealthChanged);
+		}
+	}
+}
+
 void ATopDownPlayerState::OnRep_IsDead(bool bOldIsDead) const
 {
 	UE_LOG(LogPlayerManagement, Display, TEXT("bOldIsDead: %hhd, IsDead: %hhd"), bOldIsDead, IsDead);
@@ -55,9 +68,22 @@ void ATopDownPlayerState::OnRep_IsDead(bool bOldIsDead) const
 	{
 		CharacterEnterDeadTransition();
 	}
-	else
+}
+
+void ATopDownPlayerState::HandleHealthChanged(const FOnAttributeChangeData& Data)
+{
+	if (HasAuthority() && !IsDead)
 	{
-		//respawn logic
+		if (Data.OldValue > 0 && Data.NewValue <= 0)
+		{
+			// death
+			UE_LOG(LogAbilitySystem, Log, TEXT("Player with id: %d would die"), GetPlayerId());
+			SetDeadState(true);
+		}
+		else if (Data.NewValue > 0)
+		{
+			// take damage
+		}
 	}
 }
 

@@ -69,14 +69,6 @@ void UOverrunAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffec
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
 		UE_LOG(LogTemp, Display, TEXT("%s health effect executed. New health: %.1f, Max health: %.1f"), *GetNameSafe(GetOwningActor()), GetHealth(), GetMaxHealth());
-		if (ATopDownPlayerState* GEOwnerPlayerState = Cast<ATopDownPlayerState>(Data.Target.GetOwner()))
-		{
-			if (GetHealth() <= 0.f)
-			{
-				UE_LOG(LogAbilitySystem, Log, TEXT("Player with id: %d would die"), GEOwnerPlayerState->GetPlayerId());
-				GEOwnerPlayerState->SetDeadState(true);
-			}
-		}
 	}
 	
 }
