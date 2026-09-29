@@ -40,7 +40,7 @@ public:
 	TObjectPtr<UInputAction> DashAction;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	TObjectPtr<UInputAction> DamageAction; // temp for damage tests
+	TObjectPtr<UInputAction> FireAction;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
@@ -64,17 +64,14 @@ public:
 	double GetGroundSpeed() const;
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Locomotion")
 	float GetLocomotionDirection() const;
-	UFUNCTION(Server, Reliable)
-	void ShootWeapon();
-	UFUNCTION(NetMulticast, Unreliable) // cause its debug
-	void ClientDrawShotDebug(FVector Start, FVector End);
 	
 	void EnterDeadTransition() const;
+	void ShootWeapon();
 
 private:
 	void OnMoveAction(const FInputActionValue& Value);
 	void OnSprintActionStarted(const FInputActionValue& Value);
 	void OnSprintActionCompleted(const FInputActionValue& Value);
 	void OnDashActionStarted(const FInputActionValue& Value);
-	void OnDamageActionStarted(const FInputActionValue& Value);
+	void OnFireActionStarted(const FInputActionValue& Value);
 };

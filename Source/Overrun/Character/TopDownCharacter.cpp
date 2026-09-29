@@ -100,9 +100,9 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EIC->BindAction(DashAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDashActionStarted);
 		}
-		if (DamageAction)
+		if (FireAction)
 		{
-			EIC->BindAction(DamageAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnDamageActionStarted);
+			EIC->BindAction(FireAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnFireActionStarted);
 		}
 	}
 }
@@ -170,7 +170,7 @@ float ATopDownCharacter::GetLocomotionDirection() const
 	return UKismetAnimationLibrary::CalculateDirection(GetVelocity(), GetActorRotation());
 }
 
-void ATopDownCharacter::ShootWeapon_Implementation()
+void ATopDownCharacter::ShootWeapon()
 {
 	if (IsDead()) return;
 	FVector CharacterPosition = GetActorLocation();
@@ -182,10 +182,9 @@ void ATopDownCharacter::ShootWeapon_Implementation()
 	GetWorld()->LineTraceSingleByChannel(Hit, CharacterPosition, CharacterPosition + Forward * 2000, ECC_Visibility, CollisionParams);
 	if (Hit.bBlockingHit)
 	{
-		ClientDrawShotDebug(CharacterPosition, Hit.ImpactPoint);
+		// ClientDrawShotDebug(CharacterPosition, Hit.ImpactPoint);
 		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))
 		{
-			
 			if (UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent())
 			{
 				if (UAbilitySystemComponent* OwnASC = GetAbilitySystemComponent())
@@ -202,16 +201,9 @@ void ATopDownCharacter::ShootWeapon_Implementation()
 	}
 	else
 	{
-		ClientDrawShotDebug(CharacterPosition, CharacterPosition + Forward * 2000);
+		// ClientDrawShotDebug(CharacterPosition, CharacterPosition + Forward * 2000);
 	}
 	// send ray, check hit, calc damage
-}
-
-void ATopDownCharacter::ClientDrawShotDebug_Implementation(FVector Start, FVector End)
-{
-	DrawDebugSphere(GetWorld(), Start, 20.f, 6, FColor::Green, false, 2.f);
-	DrawDebugLine(GetWorld(), Start, End, FColor::Green, false, 2.f);
-	DrawDebugSphere(GetWorld(), End, 20.f, 6, FColor::Red, false, 2.f);
 }
 
 void ATopDownCharacter::EnterDeadTransition() const
@@ -256,9 +248,12 @@ void ATopDownCharacter::OnDashActionStarted(const FInputActionValue& Value)
 	OverrunHelper::TryActivateAbilityByTag(GetAbilitySystemComponent(), TAG_Ability_Dash);
 }
 
-void ATopDownCharacter::OnDamageActionStarted(const FInputActionValue& Value)
+void ATopDownCharacter::OnFireActionStarted(const FInputActionValue& Value)
 {
-	ShootWeapon();
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		OverrunHelper::TryActivateAbilityByTag(ASC, TAG_Ability_Fire);
+	}
 }
 
 bool ATopDownCharacter::IsDead() const
