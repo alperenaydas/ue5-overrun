@@ -3,6 +3,7 @@
 
 #include "Overrun/AbilitySystem/GA_Fire.h"
 
+#include "GameplayPrediction.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemLog.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
@@ -16,6 +17,7 @@ UGA_Fire::UGA_Fire()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	const FGameplayTagContainer AbilityTagsToSet(TAG_Ability_Fire);
 	SetAssetTags(AbilityTagsToSet);
+	bServerRespectsRemoteAbilityCancellation = true;
 }
 
 void UGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -44,38 +46,13 @@ void UGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		}
 		if (ActorInfo->IsLocallyControlled())
 		{
-			FGameplayAbilityTargetDataHandle TargetData;
-			FGameplayAbilityTargetData_LocationInfo* LocationInfo = new FGameplayAbilityTargetData_LocationInfo();
-			LocationInfo->SourceLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
-			LocationInfo->TargetLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
-			FVector CharacterPosition = TopDownCharacter->GetActorLocation();
-			FVector Forward = TopDownCharacter->GetControlRotation().Vector();
-			FVector EndPoint = CharacterPosition + Forward * 2000;
-			LocationInfo->SourceLocation.LiteralTransform = FTransform(CharacterPosition);
-			LocationInfo->TargetLocation.LiteralTransform = FTransform(EndPoint);
-			TargetData.Add(LocationInfo);
-			
-			FHitResult Hit;
-			FCollisionQueryParams CollisionParams = FCollisionQueryParams();
-			CollisionParams.AddIgnoredActor(TopDownCharacter);
-			CollisionParams.bTraceComplex = false;
-			GetWorld()->LineTraceSingleByChannel(Hit, CharacterPosition, EndPoint, ECC_Visibility, CollisionParams);
-			if (Hit.bBlockingHit)
-			{
-				OverrunHelper::DrawTrace(GetWorld(), CharacterPosition, Hit.ImpactPoint, FColor::Green); // green represents client
-			}
-			else
-			{
-				OverrunHelper::DrawTrace(GetWorld(), CharacterPosition, EndPoint, FColor::Green); // green represents client
-			}
-			if (ActorInfo->IsNetAuthority())
-			{
-				OnTargetDataReceived(TargetData, FGameplayTag());
-			}
-			else
-			{
-				ASC->CallServerSetReplicatedTargetData(Handle, ActivationKey, TargetData, FGameplayTag(), ASC->ScopedPredictionKey);
-			}
+			GetWorld()->GetTimerManager().SetTimer(
+				FireTimerHandle,
+				this,
+				&UGA_Fire::FireLocalShot,
+				FireInterval,
+				true);
+			FireLocalShot();
 		}
 		return;
 	}
@@ -97,8 +74,62 @@ void UGA_Fire::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamepl
 			TargetDataDelegateHandle.Reset();
 		}
 	}
+	UWorld* World = GetWorld();
+	if (World && FireTimerHandle.IsValid())
+	{
+		World->GetTimerManager().ClearTimer(FireTimerHandle);
+	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 	
+}
+
+void UGA_Fire::FireLocalShot()
+{
+	if (!IsActive()) return;
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ActorInfo || !ASC) return;
+	if (!ActorInfo->IsLocallyControlled()) return;
+	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
+	const ATopDownCharacter* TopDownCharacter = Cast<ATopDownCharacter>(ActorInfo->AvatarActor.Get());
+	if (!TopDownCharacter || TopDownCharacter->IsDead())
+	{
+		EndAbility(Handle, ActorInfo, GetCurrentActivationInfo(), true, false);
+		return;
+	}
+	const FPredictionKey ActivationKey = GetCurrentActivationInfo().GetActivationPredictionKey();
+	FGameplayAbilityTargetDataHandle TargetData;
+	FGameplayAbilityTargetData_LocationInfo* LocationInfo = new FGameplayAbilityTargetData_LocationInfo();
+	LocationInfo->SourceLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
+	LocationInfo->TargetLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
+	FVector CharacterPosition = TopDownCharacter->GetActorLocation();
+	FVector Forward = TopDownCharacter->GetControlRotation().Vector();
+	FVector EndPoint = CharacterPosition + Forward * 2000;
+	LocationInfo->SourceLocation.LiteralTransform = FTransform(CharacterPosition);
+	LocationInfo->TargetLocation.LiteralTransform = FTransform(EndPoint);
+	TargetData.Add(LocationInfo);
+	FScopedPredictionWindow PredictionWindow(ASC, !ActorInfo->IsNetAuthority());
+	FHitResult Hit;
+	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
+	CollisionParams.AddIgnoredActor(TopDownCharacter);
+	CollisionParams.bTraceComplex = false;
+	GetWorld()->LineTraceSingleByChannel(Hit, CharacterPosition, EndPoint, ECC_Visibility, CollisionParams);
+	if (Hit.bBlockingHit)
+	{
+		OverrunHelper::DrawTrace(GetWorld(), CharacterPosition, Hit.ImpactPoint, FColor::Green); // green represents client
+	}
+	else
+	{
+		OverrunHelper::DrawTrace(GetWorld(), CharacterPosition, EndPoint, FColor::Green); // green represents client
+	}
+	if (ActorInfo->IsNetAuthority())
+	{
+		OnTargetDataReceived(TargetData, FGameplayTag());
+	}
+	else
+	{
+		ASC->CallServerSetReplicatedTargetData(Handle, ActivationKey, TargetData, FGameplayTag(), ASC->ScopedPredictionKey);
+	}
 }
 
 void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data, FGameplayTag ApplicationTag)
@@ -153,6 +184,7 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	if (!TryConsumeServerShotBudget()) return;
 	FVector SampledUnitDirection = SampledDirectionVector.GetSafeNormal();
 	FHitResult Hit;
 	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
@@ -175,5 +207,38 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 			}
 		}
 	}
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+bool UGA_Fire::TryConsumeServerShotBudget()
+{
+	const UWorld* World = GetWorld();
+	if (!World || !FMath::IsFinite(FireInterval) || FireInterval <= 0.f)
+	{
+		return false;
+	}
+
+	const double Now = World->GetTimeSeconds();
+
+	if (!bServerShotBudgetInitialized)
+	{
+		ServerLastBudgetTime = Now;
+		bServerShotBudgetInitialized = true;
+	}
+
+	const double Elapsed =
+		FMath::Max(0.0, Now - ServerLastBudgetTime);
+
+	ServerShotCredits = FMath::Min(
+		2.0,
+		ServerShotCredits + Elapsed / static_cast<double>(FireInterval));
+
+	ServerLastBudgetTime = Now;
+
+	if (ServerShotCredits < 1.0)
+	{
+		return false;
+	}
+
+	ServerShotCredits -= 1.0;
+	return true;
 }

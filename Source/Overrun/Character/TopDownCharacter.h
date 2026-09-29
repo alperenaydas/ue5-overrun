@@ -66,7 +66,6 @@ public:
 	float GetLocomotionDirection() const;
 	
 	void EnterDeadTransition() const;
-	void ShootWeapon();
 
 private:
 	void OnMoveAction(const FInputActionValue& Value);
@@ -74,4 +73,5 @@ private:
 	void OnSprintActionCompleted(const FInputActionValue& Value);
 	void OnDashActionStarted(const FInputActionValue& Value);
 	void OnFireActionStarted(const FInputActionValue& Value);
+	void OnFireActionStopped();
 };

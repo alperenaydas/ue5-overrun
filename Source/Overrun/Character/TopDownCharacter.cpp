@@ -103,6 +103,8 @@ void ATopDownCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		if (FireAction)
 		{
 			EIC->BindAction(FireAction, ETriggerEvent::Started, this, &ATopDownCharacter::OnFireActionStarted);
+			EIC->BindAction(FireAction, ETriggerEvent::Completed, this, &ATopDownCharacter::OnFireActionStopped);
+			EIC->BindAction(FireAction, ETriggerEvent::Canceled, this, &ATopDownCharacter::OnFireActionStopped);
 		}
 	}
 }
@@ -170,42 +172,6 @@ float ATopDownCharacter::GetLocomotionDirection() const
 	return UKismetAnimationLibrary::CalculateDirection(GetVelocity(), GetActorRotation());
 }
 
-void ATopDownCharacter::ShootWeapon()
-{
-	if (IsDead()) return;
-	FVector CharacterPosition = GetActorLocation();
-	FVector Forward = GetControlRotation().Vector();
-	FHitResult Hit;
-	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
-	CollisionParams.AddIgnoredActor(this);
-	CollisionParams.bTraceComplex = false;
-	GetWorld()->LineTraceSingleByChannel(Hit, CharacterPosition, CharacterPosition + Forward * 2000, ECC_Visibility, CollisionParams);
-	if (Hit.bBlockingHit)
-	{
-		// ClientDrawShotDebug(CharacterPosition, Hit.ImpactPoint);
-		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))
-		{
-			if (UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent())
-			{
-				if (UAbilitySystemComponent* OwnASC = GetAbilitySystemComponent())
-				{
-					FGameplayEffectContextHandle GEContextHandle = OwnASC->MakeEffectContext();
-					FGameplayEffectSpecHandle GESpecHandle = OwnASC->MakeOutgoingSpec(DamageEffect, 1, GEContextHandle);
-					if (GESpecHandle.IsValid())
-					{
-						OwnASC->ApplyGameplayEffectSpecToTarget(*GESpecHandle.Data.Get(), TargetASC);
-					}
-				}
-			}
-		}
-	}
-	else
-	{
-		// ClientDrawShotDebug(CharacterPosition, CharacterPosition + Forward * 2000);
-	}
-	// send ray, check hit, calc damage
-}
-
 void ATopDownCharacter::EnterDeadTransition() const
 {
 	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(GetMovementComponent()))
@@ -213,6 +179,11 @@ void ATopDownCharacter::EnterDeadTransition() const
 		CMC->DisableMovement();
 		CMC->SetSprinting(false);
 		CMC->ClearCustomIntents();
+	}
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		const FGameplayTagContainer FireTags(TAG_Ability_Fire);
+		ASC->CancelAbilities(&FireTags);
 	}
 }
 
@@ -253,6 +224,15 @@ void ATopDownCharacter::OnFireActionStarted(const FInputActionValue& Value)
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		OverrunHelper::TryActivateAbilityByTag(ASC, TAG_Ability_Fire);
+	}
+}
+
+void ATopDownCharacter::OnFireActionStopped()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		const FGameplayTagContainer FireTags(TAG_Ability_Fire);
+		ASC->CancelAbilities(&FireTags);
 	}
 }
 
