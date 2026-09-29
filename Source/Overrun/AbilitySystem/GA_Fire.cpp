@@ -184,14 +184,30 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	
+	const FVector ServerPosition = Character->GetActorLocation();
+
+	if (!FMath::IsFinite(MaxShotOriginError) || MaxShotOriginError < 0.f)
+	{
+		return;
+	}
+
+	const double OriginErrorSquared =
+		FVector::DistSquared(SampledStart, ServerPosition);
+
+	if (OriginErrorSquared > MaxShotOriginError * MaxShotOriginError)
+	{
+		UE_LOG(LogAbilitySystem, Warning, TEXT("Character MaxErrorDistance exceeded, shot ignored. ErrorDistanceSqr: %f"), OriginErrorSquared);
+		return;
+	}
+	
 	if (!TryConsumeServerShotBudget()) return;
 	FVector SampledUnitDirection = SampledDirectionVector.GetSafeNormal();
 	FHitResult Hit;
 	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
 	CollisionParams.AddIgnoredActor(Character);
 	CollisionParams.bTraceComplex = false;
-	FVector ServerPosition = Character->GetActorLocation();
-	GetWorld()->LineTraceSingleByChannel(Hit, ServerPosition, ServerPosition + SampledUnitDirection * 2000.f, ECC_Visibility, CollisionParams);
+	GetWorld()->LineTraceSingleByChannel(Hit, SampledStart, SampledStart + SampledUnitDirection * 2000.f, ECC_Visibility, CollisionParams);
 	if (Hit.bBlockingHit)
 	{
 		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))

@@ -30,6 +30,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon", meta = (ClampMin = "0.01"))
 	float FireInterval = 0.1f;
 	
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon", meta = (ClampMin = "0.0"))
+	float MaxShotOriginError = 150.f;
+	
 private:
 	double ServerShotCredits = 2.0; // with 0.1 fire interval, 200ms credit budget
 	double ServerLastBudgetTime = 0.0;
