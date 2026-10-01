@@ -30,6 +30,7 @@ public:
 	virtual uint8 GetCompressedFlags() const override;
 	virtual void CombineWith(const FSavedMove_Character* OldMove, ACharacter* InCharacter, APlayerController* PC, const FVector& OldStartLocation) override;
 	virtual void SetInitialPosition(ACharacter* C) override;
+	virtual void PostUpdate(ACharacter* C, EPostUpdateMode PostUpdateMode) override;
 };
 
 class FNetworkPredictionData_Client_TopDown : public FNetworkPredictionData_Client_Character
@@ -59,6 +60,15 @@ public:
 	virtual bool Serialize(UCharacterMovementComponent& CharacterMovement, FArchive& Ar, UPackageMap* PackageMap) override;
 	
 };
+
+struct FCharacterMovementDataForHistoryBuffer
+{
+	float CMCTimestamp;
+	FVector ServerSimulatedLocation;
+	double ServerRecordingTime;
+};
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnMovementHistoryRecorded, float);
 
 /**
  * 
@@ -108,6 +118,17 @@ private:
 	uint8 bStaminaExhausted : 1;
 	FCharacterMoveResponseDataContainerWithTopDownAdditions TopDownMoveResponseDataContainer;
 
+	// history ring buffer (purpose network engine)
+	static constexpr int32 MovementHistoryCapacity = 256;
+	FCharacterMovementDataForHistoryBuffer MovementHistoryBuffer[MovementHistoryCapacity]{};
+
+	int32 MovementHistoryHead = 0;
+	int32 MovementHistoryCount = 0;
+
+	float LatestLocalMoveTimestamp = 0.f;
+	FVector LatestLocalMoveLocation = FVector::ZeroVector;
+	bool bHasLatestLocalMove = false;
+
 	
 public:
 	void SetSprinting(const bool IsSprinting);
@@ -118,6 +139,9 @@ public:
 	float LastComputedCorrectionDistance = 0.f;
 	float GetCurrentStamina() const;
 	void ClearCustomIntents();
+	bool TryCaptureShotMovementSnapshot(float& OutTimestamp, FVector& OutLocation);
+	bool TryFindMovementHistory(float MovementTimestamp, FCharacterMovementDataForHistoryBuffer& OutRecord) const;
+	FOnMovementHistoryRecorded OnMovementHistoryRecorded;
 	
 	
 	
@@ -134,4 +158,5 @@ protected:
 	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 	virtual void BeginPlay() override;
 	virtual void ServerMoveHandleClientError(float ClientTimeStamp, float DeltaTime, const FVector& Accel, const FVector& RelativeClientLocation, UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName, uint8 ClientMovementMode) override;
+	virtual void MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel) override;
 };

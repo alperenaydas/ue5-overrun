@@ -119,6 +119,17 @@ void FSavedMove_TopDown::SetInitialPosition(ACharacter* C)
 	}
 }
 
+void FSavedMove_TopDown::PostUpdate(ACharacter* C, EPostUpdateMode PostUpdateMode)
+{
+	FSavedMove_Character::PostUpdate(C, PostUpdateMode);
+	if (UTopDownCMC* CMC = Cast<UTopDownCMC>(C->GetCharacterMovement()))
+	{
+		CMC->LatestLocalMoveTimestamp = TimeStamp;
+		CMC->LatestLocalMoveLocation = SavedLocation;
+		CMC->bHasLatestLocalMove = true;
+	}
+}
+
 FNetworkPredictionData_Client_TopDown::FNetworkPredictionData_Client_TopDown(const UCharacterMovementComponent& ClientMovement) : Super(ClientMovement)
 {
 	
@@ -206,6 +217,39 @@ void UTopDownCMC::ClearCustomIntents()
 {
 	bWantsToSprint = false;
 	bWantsToDash = false;
+}
+
+bool UTopDownCMC::TryCaptureShotMovementSnapshot(float& OutTimestamp, FVector& OutLocation)
+{
+	if (!bHasLatestLocalMove) return false;
+	FNetworkPredictionData_Client_Character* ClientData = GetPredictionData_Client_Character();
+	if (!ClientData) return false;
+	if (ClientData->PendingMove.IsValid())
+	{
+		FSavedMove_Character* PendingMove = ClientData->PendingMove.Get();
+		if (PendingMove->TimeStamp == LatestLocalMoveTimestamp)
+		{
+			PendingMove->bForceNoCombine = true; // preserve this move so later it can't be removed by combining
+		}
+	}
+	OutTimestamp = LatestLocalMoveTimestamp;
+	OutLocation = LatestLocalMoveLocation;
+	return true;
+}
+
+bool UTopDownCMC::TryFindMovementHistory(float MovementTimestamp,
+	FCharacterMovementDataForHistoryBuffer& OutRecord) const
+{
+	for (int i=0;i<MovementHistoryCount;i++)
+	{
+		const int32 ReadIndex = (MovementHistoryHead + i) % MovementHistoryCapacity; // start from oldest entry
+		if (MovementHistoryBuffer[ReadIndex].CMCTimestamp == MovementTimestamp)
+		{
+			OutRecord = MovementHistoryBuffer[ReadIndex];
+			return true;
+		}
+	}
+	return false;
 }
 
 void UTopDownCMC::UpdateFromCompressedFlags(uint8 Flags)
@@ -377,6 +421,48 @@ void UTopDownCMC::ServerMoveHandleClientError(float ClientTimeStamp, float Delta
 		TopDownMoveResponseDataContainer.ResponseDashCooldownRemaining = DashCooldownRemaining;
 		TopDownMoveResponseDataContainer.bResponseStaminaExhausted = bStaminaExhausted;
 	}
+}
+
+void UTopDownCMC::MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel)
+{
+	Super::MoveAutonomous(ClientTimeStamp, DeltaTime, CompressedFlags, NewAccel);
+
+	if (!HasValidData() || !CharacterOwner->HasAuthority())
+	{
+		return;
+	}
+
+	if (MovementHistoryCount > 0)
+	{
+		const int32 NewestIndex =
+			(MovementHistoryHead + MovementHistoryCount - 1)
+			% MovementHistoryCapacity;
+
+		if (ClientTimeStamp < MovementHistoryBuffer[NewestIndex].CMCTimestamp)
+		{
+			MovementHistoryHead = 0;
+			MovementHistoryCount = 0;
+		}
+	}
+
+	const FVector ServerSimulatedLocation = UpdatedComponent->GetComponentLocation();
+	const UWorld* World = GetWorld();
+	if (!World) return;
+	const double Now = World->GetTimeSeconds();
+	const FCharacterMovementDataForHistoryBuffer NewMovementData = FCharacterMovementDataForHistoryBuffer(ClientTimeStamp, ServerSimulatedLocation, Now);
+	const int32 WriteIndex = (MovementHistoryHead + MovementHistoryCount) % MovementHistoryCapacity;
+	MovementHistoryBuffer[WriteIndex] = NewMovementData;
+
+	if (MovementHistoryCount < MovementHistoryCapacity)
+	{
+		MovementHistoryCount++;
+	}
+	else
+	{
+		MovementHistoryHead =(MovementHistoryHead + 1) % MovementHistoryCapacity;
+	}
+
+	OnMovementHistoryRecorded.Broadcast(ClientTimeStamp);
 }
 
 int32 UTopDownCMC::LastSecondCorrectionCount() const
