@@ -3,12 +3,14 @@
 
 #include "Overrun/Mass/OverrunMassMovementProcessor.h"
 #include "MassCommonFragments.h"
+#include "MassCommonTypes.h"
 #include "MassExecutionContext.h"
 #include "OverrunMassProbeTag.h"
 
 UOverrunMassMovementProcessor::UOverrunMassMovementProcessor() : EntityQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
+	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server);
 }
 
 void UOverrunMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
