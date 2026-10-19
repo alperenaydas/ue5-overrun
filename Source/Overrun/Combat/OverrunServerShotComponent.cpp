@@ -244,6 +244,7 @@ void UOverrunServerShotComponent::ValidateAndApplyServerShot(const FFireAbilityD
 		UE_LOG(LogAbilitySystem, Verbose, TEXT("Mass hit=%d entity=%d:%d distance=%.1f cm"), bEnemyHit, EnemyEntity.Index, EnemyEntity.SerialNumber, bEnemyHit ? EnemyDistance : -1.f);
 		if (bEnemyHit && (!Hit.bBlockingHit || EnemyDistance < Hit.Distance))
 		{
+			Character->MulticastShotCosmetics(SampledStart + SampledUnitDirection * EnemyDistance);
 			FOverrunEnemyDamageCommand Command;
 			Command.TargetEntity = EnemyEntity;
 			Command.Damage = Shot.Damage;
@@ -256,6 +257,7 @@ void UOverrunServerShotComponent::ValidateAndApplyServerShot(const FFireAbilityD
 			return;
 		}
 	}
+	Character->MulticastShotCosmetics(Hit.bBlockingHit ? Hit.ImpactPoint : ShotEnd);
 	if (Hit.bBlockingHit)
 	{
 		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))

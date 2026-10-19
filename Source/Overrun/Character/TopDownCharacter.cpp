@@ -58,6 +58,21 @@ ATopDownCharacter::ATopDownCharacter(const FObjectInitializer& ObjectInitializer
 	ServerShotComponent = CreateDefaultSubobject<UOverrunServerShotComponent>(TEXT("ServerShotComponent"));
 }
 
+void ATopDownCharacter::MulticastShotCosmetics_Implementation(FVector_NetQuantize ImpactPoint)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (!IsLocallyControlled())
+	{
+		PlayMuzzleFlash();
+	}
+
+	PlayShotTracer(ImpactPoint);
+}
+
 // Called when the game starts or when spawned
 void ATopDownCharacter::BeginPlay()
 {

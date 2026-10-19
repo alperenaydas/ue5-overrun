@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
+#include "Engine/NetSerialization.h"
 #include "TopDownCharacter.generated.h"
 
 class UOverrunServerShotComponent;
@@ -57,6 +58,12 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Combat|Presentation")
 	void PlayMuzzleFlash();
+	
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastShotCosmetics(FVector_NetQuantize ImpactPoint);
+
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Combat|Presentation")
+	void PlayShotTracer(FVector ImpactPoint);
 
 public:
 	virtual void BeginPlay() override;
