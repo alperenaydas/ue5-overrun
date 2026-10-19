@@ -45,4 +45,5 @@ class OVERRUN_API UOverrunDebugHealthWidget : public UUserWidget
 public:
 	void InitializeFromASC(UAbilitySystemComponent* InASC, const FGameplayAttribute& InHealthAttribute,
 	                       const FGameplayAttribute& InMaxHealthAttribute);
+	void SetHealthValues(float InHealth, float InMaxHealth);
 };

@@ -42,10 +42,7 @@ void UOverrunDebugHealthWidget::RefreshHealthText()
 {
 	if (UAbilitySystemComponent* ASC = AbilitySystemComponent.Get(); ASC && HealthText)
 	{
-		FText HealthValueText = FText::AsNumber(ASC->GetNumericAttribute(HealthAttribute));
-		FText MaxHealthValueText = FText::AsNumber(ASC->GetNumericAttribute(MaxHealthAttribute));
-		FText CombinedHealthText = FText::Format(FText::FromString("{0} / {1}"), HealthValueText, MaxHealthValueText);
-		HealthText->SetText(CombinedHealthText);
+		SetHealthValues(ASC->GetNumericAttribute(HealthAttribute), ASC->GetNumericAttribute(MaxHealthAttribute));
 	}
 	else if (HealthText)
 	{
@@ -117,4 +114,15 @@ void UOverrunDebugHealthWidget::UnbindHealthDelegates()
 	}
 	HealthChangedDelegateHandle.Reset();
 	MaxHealthChangedDelegateHandle.Reset();
+}
+
+void UOverrunDebugHealthWidget::SetHealthValues(float InHealth, float InMaxHealth)
+{
+	if (HealthText)
+	{
+		HealthText->SetText(FText::Format(
+			FText::FromString(TEXT("{0} / {1}")),
+			FText::AsNumber(InHealth),
+			FText::AsNumber(InMaxHealth)));
+	}
 }

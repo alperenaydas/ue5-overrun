@@ -12,6 +12,8 @@
 #include "Overrun/OverrunHelper.h"
 #include "Overrun/Character/TopDownCharacter.h"
 #include "Overrun/Movement/TopDownCMC.h"
+#include "Overrun/Mass/OverrunEnemyDamageSubsystem.h"
+#include "Overrun/Mass/OverrunEnemyDamageCommand.h"
 
 UGA_Fire::UGA_Fire()
 {
@@ -253,7 +255,7 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 		FCharacterMovementDataForHistoryBuffer CharacterMovementDataAtTime;
 		if (CMC->TryFindMovementHistory(MovementTimestamp, CharacterMovementDataAtTime))
 		{
-			ValidateAndApplyServerShot(Request, CharacterMovementDataAtTime.ServerSimulatedLocation);
+			QueueResolvedShot(Request, CharacterMovementDataAtTime.ServerSimulatedLocation);
 		}
 		else
 		{
@@ -277,7 +279,7 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 		}
 		return;
 	}
-	ValidateAndApplyServerShot(Request, Character->GetActorLocation());
+	QueueResolvedShot(Request, Character->GetActorLocation());
 }
 
 void UGA_Fire::ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin)
@@ -319,12 +321,36 @@ void UGA_Fire::ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FV
 	}
 	
 	FVector SampledUnitDirection = SampledDirectionVector.GetSafeNormal();
+	constexpr float ShotRange = 2000.f;
+	const FVector ShotEnd = SampledStart + SampledUnitDirection * ShotRange;
 	FHitResult Hit;
 	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
 	CollisionParams.AddIgnoredActor(Character);
 	CollisionParams.bTraceComplex = false;
-	World->LineTraceSingleByChannel(Hit, SampledStart, SampledStart + SampledUnitDirection * 2000.f, ECC_Visibility, CollisionParams);
+	World->LineTraceSingleByChannel(Hit, SampledStart, ShotEnd, ECC_Visibility, CollisionParams);
 	UE_LOG(LogAbilitySystem, Verbose, TEXT("Server shot trace. Character: %s, Timestamp: %f, Receipt age: %.3f s, Origin error squared: %.3f, Blocking hit: %d, Target: %s"), *Character->GetName(), Shot.CMCMovementTimestamp, RequestAge, OriginErrorSquared, Hit.bBlockingHit ? 1 : 0, *GetNameSafe(Hit.GetActor()));
+	const float MaxEnemyHitDistance = Hit.bBlockingHit ? Hit.Distance : ShotRange;
+	UE_LOG(LogAbilitySystem, Verbose, TEXT("Enemy query distance limit: %.1f cm"), MaxEnemyHitDistance);
+	if (UOverrunEnemyDamageSubsystem* DamageSubsystem = World->GetSubsystem<UOverrunEnemyDamageSubsystem>())
+	{
+		FMassEntityHandle EnemyEntity;
+		float EnemyDistance = 0.f;
+		const bool bEnemyHit = DamageSubsystem->FindClosestEnemyHit(SampledStart, SampledUnitDirection, MaxEnemyHitDistance, EnemyEntity, EnemyDistance);
+		UE_LOG(LogAbilitySystem, Verbose, TEXT("Mass hit=%d entity=%d:%d distance=%.1f cm"), bEnemyHit, EnemyEntity.Index, EnemyEntity.SerialNumber, bEnemyHit ? EnemyDistance : -1.f);
+		if (bEnemyHit && (!Hit.bBlockingHit || EnemyDistance < Hit.Distance))
+		{
+			FOverrunEnemyDamageCommand Command;
+			Command.TargetEntity = EnemyEntity;
+			Command.Damage = ShotDamage;
+
+			if (!DamageSubsystem->EnqueueDamage(Command))
+			{
+				UE_LOG(LogAbilitySystem, Warning, TEXT("Enemy damage command rejected."));
+			}
+
+			return;
+		}
+	}
 	if (Hit.bBlockingHit)
 	{
 		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))
@@ -336,6 +362,7 @@ void UGA_Fire::ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FV
 				FGameplayEffectSpecHandle GESpecHandle = ASC->MakeOutgoingSpec(Character->DamageEffect, 1, GEContextHandle);
 				if (GESpecHandle.IsValid())
 				{
+					GESpecHandle.Data->SetSetByCallerMagnitude(TAG_Data_HealthDelta, -ShotDamage);
 					ASC->ApplyGameplayEffectSpecToTarget(*GESpecHandle.Data.Get(), TargetASC);
 					UE_LOG(LogAbilitySystem, Verbose, TEXT("Server shot submitted damage effect. Character: %s, Timestamp: %f, Target: %s"), *Character->GetName(), Shot.CMCMovementTimestamp, *GetNameSafe(Hit.GetActor()));
 				}
@@ -344,6 +371,24 @@ void UGA_Fire::ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FV
 					UE_LOG(LogAbilitySystem, Warning, TEXT("Server shot could not create damage effect spec. Character: %s"), *Character->GetName());
 				}
 			}
+		}
+	}
+}
+
+void UGA_Fire::QueueResolvedShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin)
+{
+	if (!IsActive()) return;
+	if (FireAbilityDatas.Num() + ResolvedShots.Num() >= 16)
+	{
+		UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot rejected: server shot queue full."));
+		return;
+	}
+	ResolvedShots.Add(FResolvedShot(Shot, ReferenceOrigin));
+	if (!ResolvedShotTimerHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			ResolvedShotTimerHandle = World->GetTimerManager().SetTimerForNextTick(this, &UGA_Fire::ProcessResolvedShots);
 		}
 	}
 }
@@ -420,7 +465,7 @@ void UGA_Fire::OnMovementHistoryRecorded(float Timestamp)
 				{
 					const FResolvedShot ResolvedShot{FireAbilityDatas[i], CharacterMovementData.ServerSimulatedLocation};
 					FireAbilityDatas.RemoveAt(i);
-					ResolvedShots.Add(ResolvedShot);
+					QueueResolvedShot(ResolvedShot.Request, ResolvedShot.ReferenceOrigin);
 					UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot resolved from movement history. Timestamp: %f, Wait: %.3f s"), Timestamp, GetWorld()->GetTimeSeconds() - ResolvedShot.Request.ServerReceiptTime);
 				}
 				else
@@ -428,14 +473,6 @@ void UGA_Fire::OnMovementHistoryRecorded(float Timestamp)
 					++i;
 				}
 			}
-		}
-	}
-	if (!ResolvedShots.IsEmpty() && !ResolvedShotTimerHandle.IsValid())
-	{
-		if (UWorld* World = GetWorld())
-		{
-			// Do not apply effects (and potentially trigger death) inside CMC simulation.
-			ResolvedShotTimerHandle = World->GetTimerManager().SetTimerForNextTick(this, &UGA_Fire::ProcessResolvedShots);
 		}
 	}
 	if (FireAbilityDatas.IsEmpty())

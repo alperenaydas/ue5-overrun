@@ -39,6 +39,9 @@ protected:
 	float FireInterval = 0.1f;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon", meta = (ClampMin = "0.0"))
+	float ShotDamage = 25.f;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon", meta = (ClampMin = "0.0"))
 	float MaxShotOriginError = 150.f;
 	
 private:
@@ -62,6 +65,7 @@ private:
 	void OnMovementHistoryRecorded(float Timestamp);
 	void ProcessResolvedShots();
 	void ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin);
+	void QueueResolvedShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin);
 	TWeakObjectPtr<UTopDownCMC> SubscribedCMC;
 
 	TArray<FFireAbilityData> FireAbilityDatas;
