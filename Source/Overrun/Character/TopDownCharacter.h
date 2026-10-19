@@ -54,6 +54,9 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UOverrunServerShotComponent> ServerShotComponent;
+	
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Combat|Presentation")
+	void PlayMuzzleFlash();
 
 public:
 	virtual void BeginPlay() override;

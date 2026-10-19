@@ -100,7 +100,7 @@ void UGA_Fire::FireLocalShot()
 	if (!ActorInfo || !ASC) return;
 	if (!ActorInfo->IsLocallyControlled()) return;
 	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
-	const ATopDownCharacter* TopDownCharacter = Cast<ATopDownCharacter>(ActorInfo->AvatarActor.Get());
+	ATopDownCharacter* TopDownCharacter = Cast<ATopDownCharacter>(ActorInfo->AvatarActor.Get());
 	if (!TopDownCharacter || TopDownCharacter->IsDead())
 	{
 		EndAbility(Handle, ActorInfo, GetCurrentActivationInfo(), true, false);
@@ -127,6 +127,7 @@ void UGA_Fire::FireLocalShot()
 	ShotDataInfo->SourceLocation.LiteralTransform = FTransform(ShotOrigin);
 	ShotDataInfo->TargetLocation.LiteralTransform = FTransform(EndPoint);
 	TargetData.Add(ShotDataInfo);
+	TopDownCharacter->PlayMuzzleFlash();
 	FScopedPredictionWindow PredictionWindow(ASC, !ActorInfo->IsNetAuthority());
 	static IConsoleVariable* ShotTracesCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Overrun.Debug.ShotTraces"));
 	if (ShotTracesCVar && ShotTracesCVar->GetInt() == 1)
