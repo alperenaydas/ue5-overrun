@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 #include "Overrun/Character/TopDownCharacter.h"
+#include "HAL/IConsoleManager.h"
 
 void AOverrunHUD::DrawHUD()
 {
@@ -26,6 +27,13 @@ void AOverrunHUD::DrawHUD()
     }
 
 #if !UE_BUILD_SHIPPING
+    static IConsoleVariable* HUDCVar =IConsoleManager::Get().FindConsoleVariable(TEXT("Overrun.Debug.HUD"));
+
+    if (!HUDCVar || HUDCVar->GetInt() != 1)
+    {
+        return;
+    }
+    
     TArray<TPair<FString, FLinearColor>> Lines;
 
     if (const APawn* OwningPawn = GetOwningPawn())

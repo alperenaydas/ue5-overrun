@@ -35,10 +35,32 @@ void UOverrunMassDebugProcessor::ConfigureQueries(const TSharedRef<FMassEntityMa
 
 void UOverrunMassDebugProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	static IConsoleVariable* HealthCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Overrun.Debug.Health"));
-	const bool bDrawHealth = HealthCVar && HealthCVar->GetInt() == 1 && Context.GetWorld()->GetNetMode() != NM_DedicatedServer;
+	UWorld* World = Context.GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	static IConsoleVariable* CapsulesCVar =
+		IConsoleManager::Get().FindConsoleVariable(
+			TEXT("Overrun.Debug.Capsules"));
+
+	static IConsoleVariable* HealthCVar =
+		IConsoleManager::Get().FindConsoleVariable(
+			TEXT("Overrun.Debug.Health"));
+
+	const bool bDrawCapsules =
+		CapsulesCVar && CapsulesCVar->GetInt() == 1;
+
+	const bool bDrawHealth =
+		HealthCVar && HealthCVar->GetInt() == 1;
+
+	if (!bDrawCapsules && !bDrawHealth)
+	{
+		return;
+	}
 	
-	EntityQuery.ForEachEntityChunk(Context, [bDrawHealth](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(Context, [bDrawHealth, bDrawCapsules](FMassExecutionContext& Context)
 	{
 		const TConstArrayView<FTransformFragment> Transforms = Context.GetFragmentView<FTransformFragment>();
 		const TConstArrayView<FOverrunEnemyHitShapeFragment> HitShapes = Context.GetFragmentView<FOverrunEnemyHitShapeFragment>();
@@ -48,7 +70,7 @@ void UOverrunMassDebugProcessor::Execute(FMassEntityManager& EntityManager, FMas
 		
 		for (FMassExecutionContext::FEntityIterator EntityIt = Context.CreateEntityIterator(); EntityIt; ++EntityIt)
 		{
-			if (!HitShapes.IsEmpty() && Context.GetWorld()->GetNetMode() != NM_Client)
+			if (bDrawCapsules && !HitShapes.IsEmpty())
 			{
 				const FOverrunEnemyHitShapeFragment& Shape = HitShapes[EntityIt];
 				const FVector Center = Transforms[EntityIt].GetTransform().GetLocation() + FVector(0.f, 0.f, Shape.CenterZOffset);

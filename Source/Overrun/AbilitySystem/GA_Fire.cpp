@@ -14,6 +14,7 @@
 #include "Overrun/Combat/OverrunServerShotComponent.h"
 #include "Overrun/Combat/OverrunServerShotTypes.h"
 #include "Overrun/Movement/TopDownCMC.h"
+#include "HAL/IConsoleManager.h"
 
 UGA_Fire::UGA_Fire()
 {
@@ -127,18 +128,22 @@ void UGA_Fire::FireLocalShot()
 	ShotDataInfo->TargetLocation.LiteralTransform = FTransform(EndPoint);
 	TargetData.Add(ShotDataInfo);
 	FScopedPredictionWindow PredictionWindow(ASC, !ActorInfo->IsNetAuthority());
-	FHitResult Hit;
-	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
-	CollisionParams.AddIgnoredActor(TopDownCharacter);
-	CollisionParams.bTraceComplex = false;
-	GetWorld()->LineTraceSingleByChannel(Hit, ShotOrigin, EndPoint, ECC_Visibility, CollisionParams);
-	if (Hit.bBlockingHit)
+	static IConsoleVariable* ShotTracesCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Overrun.Debug.ShotTraces"));
+	if (ShotTracesCVar && ShotTracesCVar->GetInt() == 1)
 	{
-		OverrunHelper::DrawTrace(GetWorld(), ShotOrigin, Hit.ImpactPoint, FColor::Green);
-	}
-	else
-	{
-		OverrunHelper::DrawTrace(GetWorld(), ShotOrigin, EndPoint, FColor::Green);
+		FHitResult Hit;
+		FCollisionQueryParams CollisionParams = FCollisionQueryParams();
+		CollisionParams.AddIgnoredActor(TopDownCharacter);
+		CollisionParams.bTraceComplex = false;
+		GetWorld()->LineTraceSingleByChannel(Hit, ShotOrigin, EndPoint, ECC_Visibility, CollisionParams);
+		if (Hit.bBlockingHit)
+		{
+			OverrunHelper::DrawTrace(GetWorld(), ShotOrigin, Hit.ImpactPoint, FColor::Green);
+		}
+		else
+		{
+			OverrunHelper::DrawTrace(GetWorld(), ShotOrigin, EndPoint, FColor::Green);
+		}
 	}
 	if (ActorInfo->IsNetAuthority())
 	{
