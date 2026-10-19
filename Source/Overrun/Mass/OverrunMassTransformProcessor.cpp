@@ -6,9 +6,12 @@
 #include "MassActorSubsystem.h"
 #include "MassCommonFragments.h"
 #include "MassExecutionContext.h"
+#include "OverrunEnemyHealthFragment.h"
+#include "OverrunEnemyHitPresentationFragment.h"
 #include "GameFramework/Actor.h"
 #include "OverrunMassProbeTag.h"
 #include "Engine/World.h"
+#include "Overrun/Combat/OverrunHitFlashComponent.h"
 
 UOverrunMassTransformProcessor::UOverrunMassTransformProcessor() : EntityQuery(*this)
 {
@@ -23,17 +26,21 @@ void UOverrunMassTransformProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	EntityQuery.AddTagRequirement<FOverrunMassProbeTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FOverrunEnemyHealthFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FOverrunEnemyHitPresentationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RequireMutatingWorldAccess();
 	Super::ConfigureQueries(EntityManager);
 }
 
 void UOverrunMassTransformProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	EntityQuery.ForEachEntityChunk(Context, [](FMassExecutionContext& Context)
+	const bool bCanPresent = Context.GetWorld()->GetNetMode() != NM_DedicatedServer;
+	EntityQuery.ForEachEntityChunk(Context, [bCanPresent](FMassExecutionContext& Context)
 	{
 		const TConstArrayView<FTransformFragment> Transforms = Context.GetFragmentView<FTransformFragment>();
-
 		const TArrayView<FMassActorFragment> Actors = Context.GetMutableFragmentView<FMassActorFragment>();
+		const TConstArrayView<FOverrunEnemyHealthFragment> Healths = Context.GetFragmentView<FOverrunEnemyHealthFragment>();
+		const TArrayView<FOverrunEnemyHitPresentationFragment> Presentations = Context.GetMutableFragmentView<FOverrunEnemyHitPresentationFragment>();
 
 		for (FMassExecutionContext::FEntityIterator EntityIt = Context.CreateEntityIterator(); EntityIt; ++EntityIt)
 		{
@@ -60,6 +67,31 @@ void UOverrunMassTransformProcessor::Execute(FMassEntityManager& EntityManager, 
 					false,
 					nullptr,
 					ETeleportType::TeleportPhysics);
+				
+				if (!bCanPresent || Healths.IsEmpty() || Presentations.IsEmpty())
+				{
+					continue;
+				}
+
+				FOverrunEnemyHitPresentationFragment& Presentation = Presentations[EntityIt];
+
+				const uint32 HitSerial = Healths[EntityIt].HitSerial;
+
+				if (Presentation.VisualActor.Get() != Actor)
+				{
+					Presentation.VisualActor = Actor;
+					Presentation.FlashComponent = Actor->FindComponentByClass<UOverrunHitFlashComponent>();
+					Presentation.LastHitSerial = HitSerial;
+				}
+				else if (Presentation.LastHitSerial != HitSerial)
+				{
+					Presentation.LastHitSerial = HitSerial;
+
+					if (UOverrunHitFlashComponent* Flash = Presentation.FlashComponent.Get())
+					{
+						Flash->PlayHitFlash();
+					}
+				}
 			}
 		}
 	});

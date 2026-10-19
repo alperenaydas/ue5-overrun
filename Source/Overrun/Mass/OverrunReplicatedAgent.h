@@ -11,6 +11,9 @@ struct FOverrunReplicatedAgent : public FReplicatedAgentBase
 	
 	const FReplicatedAgentPositionYawData& GetReplicatedPositionYawData() const { return PositionYaw; }
 	FReplicatedAgentPositionYawData& GetReplicatedPositionYawDataMutable() { return PositionYaw; }
+public:
+	UPROPERTY()
+	uint32 HitSerial = 0;
 private:
 	UPROPERTY(Transient)
 	FReplicatedAgentPositionYawData PositionYaw;

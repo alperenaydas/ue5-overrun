@@ -49,8 +49,13 @@ void UOverrunMassHealthProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					continue;
 				}
 
-				HealthFragment.Health -= Command.Damage;
-				HealthFragment.Health = FMath::Clamp(HealthFragment.Health, 0.f, HealthFragment.MaxHealth);
+				const float PreviousHealth = HealthFragment.Health;
+				HealthFragment.Health = FMath::Clamp(PreviousHealth - Command.Damage, 0.f, HealthFragment.MaxHealth);
+
+				if (HealthFragment.Health < PreviousHealth)
+				{
+					++HealthFragment.HitSerial;
+				}
 				
 				if (HealthFragment.Health <= 0.f)
 				{

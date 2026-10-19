@@ -15,6 +15,7 @@ public:
 
 #if UE_REPLICATION_COMPILE_SERVER_CODE
 	FTransformHandler& GetTransformHandlerMutable() { return TransformHandler; }
+	void SetHitSerial(FMassReplicatedAgentHandle Handle, uint32 HitSerial);
 #endif
 
 protected:
