@@ -19,6 +19,7 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Overrun/Combat/OverrunServerShotComponent.h"
 
 // Sets default values
 ATopDownCharacter::ATopDownCharacter(const FObjectInitializer& ObjectInitializer)
@@ -53,6 +54,8 @@ ATopDownCharacter::ATopDownCharacter(const FObjectInitializer& ObjectInitializer
 	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 1080.f, 0.f);
 	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+	
+	ServerShotComponent = CreateDefaultSubobject<UOverrunServerShotComponent>(TEXT("ServerShotComponent"));
 }
 
 // Called when the game starts or when spawned
@@ -184,6 +187,10 @@ void ATopDownCharacter::EnterDeadTransition() const
 	{
 		const FGameplayTagContainer FireTags(TAG_Ability_Fire);
 		ASC->CancelAbilities(&FireTags);
+	}
+	if (IsValid(ServerShotComponent))
+	{
+		ServerShotComponent->CancelPendingShots();
 	}
 }
 

@@ -5,6 +5,7 @@
 #include "GameFramework/Character.h"
 #include "TopDownCharacter.generated.h"
 
+class UOverrunServerShotComponent;
 class UGameplayEffect;
 class UGameplayAbility;
 class UCameraComponent;
@@ -50,6 +51,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	TSubclassOf<UGameplayEffect> DamageEffect;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UOverrunServerShotComponent> ServerShotComponent;
 
 public:
 	virtual void BeginPlay() override;

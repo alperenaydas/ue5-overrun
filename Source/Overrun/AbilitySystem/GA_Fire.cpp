@@ -11,9 +11,9 @@
 #include "OverrunGameplayTags.h"
 #include "Overrun/OverrunHelper.h"
 #include "Overrun/Character/TopDownCharacter.h"
+#include "Overrun/Combat/OverrunServerShotComponent.h"
+#include "Overrun/Combat/OverrunServerShotTypes.h"
 #include "Overrun/Movement/TopDownCMC.h"
-#include "Overrun/Mass/OverrunEnemyDamageSubsystem.h"
-#include "Overrun/Mass/OverrunEnemyDamageCommand.h"
 
 UGA_Fire::UGA_Fire()
 {
@@ -44,14 +44,6 @@ void UGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		const FPredictionKey ActivationKey = ActivationInfo.GetActivationPredictionKey();
 		if (ActorInfo->IsNetAuthority() && !ActorInfo->IsLocallyControlled()) // non-local server actor instance
 		{
-			UTopDownCMC* CMC = Cast<UTopDownCMC>(TopDownCharacter->GetCharacterMovement());
-			if (!CMC)
-			{
-				EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-				return;
-			}
-			HistoryDelegateHandle = CMC->OnMovementHistoryRecorded.AddUObject(this, &UGA_Fire::OnMovementHistoryRecorded);
-			SubscribedCMC = CMC;
 			TargetDataDelegateHandle = ASC->AbilityTargetDataSetDelegate(Handle, ActivationKey).AddUObject(this, &UGA_Fire::OnTargetDataReceived);
 			ASC->CallReplicatedTargetDataDelegatesIfSet(Handle, ActivationKey);
 			return;
@@ -74,43 +66,29 @@ void UGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-void UGA_Fire::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+void UGA_Fire::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	if (Handle.IsValid() && TargetDataDelegateHandle.IsValid())
 	{
-		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-		if (ASC)
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 		{
 			ASC->AbilityTargetDataSetDelegate(Handle, ActivationInfo.GetActivationPredictionKey()).Remove(TargetDataDelegateHandle);
-			TargetDataDelegateHandle.Reset();
 		}
 	}
-	UWorld* World = GetWorld();
-	if (World && FireTimerHandle.IsValid())
+
+	TargetDataDelegateHandle.Reset();
+
+	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(FireTimerHandle);
 	}
-	if (World)
-	{
-		World->GetTimerManager().ClearTimer(PendingShotCleanupTimerHandle);
-		World->GetTimerManager().ClearTimer(ResolvedShotTimerHandle);
-	}
 
-	if (UTopDownCMC* CMC = SubscribedCMC.Get())
-	{
-		CMC->OnMovementHistoryRecorded.Remove(HistoryDelegateHandle);
-	}
-	HistoryDelegateHandle.Reset();
-	SubscribedCMC.Reset();
-	if (!FireAbilityDatas.IsEmpty() || !ResolvedShots.IsEmpty())
-	{
-		UE_LOG(LogAbilitySystem, Verbose, TEXT("Fire ended: discarding %d pending and %d resolved shots."), FireAbilityDatas.Num(), ResolvedShots.Num());
-	}
-	FireAbilityDatas.Reset();
-	ResolvedShots.Reset();
-	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
-	
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		bReplicateEndAbility,
+		bWasCancelled);
 }
 
 void UGA_Fire::FireLocalShot()
@@ -242,155 +220,24 @@ void UGA_Fire::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data
 		UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot rejected by fire-rate budget. Character: %s, Timestamp: %f, Credits: %.3f"), *Character->GetName(), MovementTimestamp, ServerShotCredits);
 		return;
 	}
-	const FFireAbilityData Request{SampledStart, MovementTimestamp, SampledEnd, World->GetTimeSeconds()};
-	if (!ActorInfo->IsLocallyControlled())
-	{
-		ExpirePendingShots();
-		UTopDownCMC* CMC = Cast<UTopDownCMC>(Character->GetMovementComponent());
-		if (!CMC)
-		{
-			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-			return;
-		}
-		FCharacterMovementDataForHistoryBuffer CharacterMovementDataAtTime;
-		if (CMC->TryFindMovementHistory(MovementTimestamp, CharacterMovementDataAtTime))
-		{
-			QueueResolvedShot(Request, CharacterMovementDataAtTime.ServerSimulatedLocation);
-		}
-		else
-		{
-			if (FireAbilityDatas.Num() + ResolvedShots.Num() >= 16)
-			{
-				UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot rejected: history queue full. Character: %s, Timestamp: %f"), *Character->GetName(), MovementTimestamp);
-				return;
-			}
-			FireAbilityDatas.Add(Request);
-			if (!World->GetTimerManager().IsTimerActive(PendingShotCleanupTimerHandle))
-			{
-				World->GetTimerManager().SetTimer(
-					PendingShotCleanupTimerHandle,
-					this,
-					&UGA_Fire::ExpirePendingShots,
-					PendingShotCleanupInterval,
-					true);
-			}
-			UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot waiting for movement history. Character: %s, Timestamp: %f"), *Character->GetName(), MovementTimestamp);
-			return;
-		}
-		return;
-	}
-	QueueResolvedShot(Request, Character->GetActorLocation());
-}
-
-void UGA_Fire::ValidateAndApplyServerShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin)
-{
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	UWorld* World = GetWorld();
-	if (!IsActive() || !ActorInfo || !ActorInfo->IsNetAuthority() || !ASC || !World) return;
-	ATopDownCharacter* Character = Cast<ATopDownCharacter>(ActorInfo->AvatarActor.Get());
-	if (!Character) return;
-	if (Character->IsDead() || ASC->HasMatchingGameplayTag(TAG_State_Dead))
-	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
-		return;
-	}
-	// Waiting for movement does not extend a shot's lifetime.
-	const double RequestAge = World->GetTimeSeconds() - Shot.ServerReceiptTime;
-	if (!FMath::IsFinite(RequestAge) || RequestAge < 0.0 || RequestAge >= MaxPendingShotWait)
-	{
-		UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot rejected at processing: receipt age %.3f s. Character: %s, Timestamp: %f"), RequestAge, *Character->GetName(), Shot.CMCMovementTimestamp);
-		return;
-	}
-	const FVector SampledStart = Shot.SampledOrigin;
-	const FVector SampledDirectionVector = Shot.SampledDestination - SampledStart;
-	if (SampledStart.ContainsNaN() || ReferenceOrigin.ContainsNaN()
-		|| SampledDirectionVector.ContainsNaN() || SampledDirectionVector.IsNearlyZero()) return;
-
-	if (!FMath::IsFinite(MaxShotOriginError) || MaxShotOriginError < 0.f)
-	{
-		return;
-	}
-
-	const double OriginErrorSquared = FVector::DistSquared(SampledStart, ReferenceOrigin);
-
-	if (OriginErrorSquared > MaxShotOriginError * MaxShotOriginError)
-	{
-		UE_LOG(LogAbilitySystem, Warning, TEXT("Character MaxErrorDistance exceeded, shot ignored. ErrorDistanceSqr: %f"), OriginErrorSquared);
-		return;
-	}
 	
-	FVector SampledUnitDirection = SampledDirectionVector.GetSafeNormal();
-	constexpr float ShotRange = 2000.f;
-	const FVector ShotEnd = SampledStart + SampledUnitDirection * ShotRange;
-	FHitResult Hit;
-	FCollisionQueryParams CollisionParams = FCollisionQueryParams();
-	CollisionParams.AddIgnoredActor(Character);
-	CollisionParams.bTraceComplex = false;
-	World->LineTraceSingleByChannel(Hit, SampledStart, ShotEnd, ECC_Visibility, CollisionParams);
-	UE_LOG(LogAbilitySystem, Verbose, TEXT("Server shot trace. Character: %s, Timestamp: %f, Receipt age: %.3f s, Origin error squared: %.3f, Blocking hit: %d, Target: %s"), *Character->GetName(), Shot.CMCMovementTimestamp, RequestAge, OriginErrorSquared, Hit.bBlockingHit ? 1 : 0, *GetNameSafe(Hit.GetActor()));
-	const float MaxEnemyHitDistance = Hit.bBlockingHit ? Hit.Distance : ShotRange;
-	UE_LOG(LogAbilitySystem, Verbose, TEXT("Enemy query distance limit: %.1f cm"), MaxEnemyHitDistance);
-	if (UOverrunEnemyDamageSubsystem* DamageSubsystem = World->GetSubsystem<UOverrunEnemyDamageSubsystem>())
+	const FFireAbilityData Request{
+		SampledStart,
+		MovementTimestamp,
+		SampledEnd,
+		World->GetTimeSeconds(),
+		ShotDamage,
+		MaxShotOriginError
+	};
+	
+	if (!IsValid(Character->ServerShotComponent))
 	{
-		FMassEntityHandle EnemyEntity;
-		float EnemyDistance = 0.f;
-		const bool bEnemyHit = DamageSubsystem->FindClosestEnemyHit(SampledStart, SampledUnitDirection, MaxEnemyHitDistance, EnemyEntity, EnemyDistance);
-		UE_LOG(LogAbilitySystem, Verbose, TEXT("Mass hit=%d entity=%d:%d distance=%.1f cm"), bEnemyHit, EnemyEntity.Index, EnemyEntity.SerialNumber, bEnemyHit ? EnemyDistance : -1.f);
-		if (bEnemyHit && (!Hit.bBlockingHit || EnemyDistance < Hit.Distance))
-		{
-			FOverrunEnemyDamageCommand Command;
-			Command.TargetEntity = EnemyEntity;
-			Command.Damage = ShotDamage;
-
-			if (!DamageSubsystem->EnqueueDamage(Command))
-			{
-				UE_LOG(LogAbilitySystem, Warning, TEXT("Enemy damage command rejected."));
-			}
-
-			return;
-		}
-	}
-	if (Hit.bBlockingHit)
-	{
-		if (IAbilitySystemInterface* Target = Cast<IAbilitySystemInterface>(Hit.GetActor()))
-		{
-			if (UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent())
-			{
-				FGameplayEffectContextHandle GEContextHandle = ASC->MakeEffectContext();
-				GEContextHandle.AddHitResult(Hit);
-				FGameplayEffectSpecHandle GESpecHandle = ASC->MakeOutgoingSpec(Character->DamageEffect, 1, GEContextHandle);
-				if (GESpecHandle.IsValid())
-				{
-					GESpecHandle.Data->SetSetByCallerMagnitude(TAG_Data_HealthDelta, -ShotDamage);
-					ASC->ApplyGameplayEffectSpecToTarget(*GESpecHandle.Data.Get(), TargetASC);
-					UE_LOG(LogAbilitySystem, Verbose, TEXT("Server shot submitted damage effect. Character: %s, Timestamp: %f, Target: %s"), *Character->GetName(), Shot.CMCMovementTimestamp, *GetNameSafe(Hit.GetActor()));
-				}
-				else
-				{
-					UE_LOG(LogAbilitySystem, Warning, TEXT("Server shot could not create damage effect spec. Character: %s"), *Character->GetName());
-				}
-			}
-		}
-	}
-}
-
-void UGA_Fire::QueueResolvedShot(const FFireAbilityData& Shot, const FVector& ReferenceOrigin)
-{
-	if (!IsActive()) return;
-	if (FireAbilityDatas.Num() + ResolvedShots.Num() >= 16)
-	{
-		UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot rejected: server shot queue full."));
+		UE_LOG(LogAbilitySystem, Error,
+			TEXT("Fire ability requires a server shot component."));
 		return;
 	}
-	ResolvedShots.Add(FResolvedShot(Shot, ReferenceOrigin));
-	if (!ResolvedShotTimerHandle.IsValid())
-	{
-		if (UWorld* World = GetWorld())
-		{
-			ResolvedShotTimerHandle = World->GetTimerManager().SetTimerForNextTick(this, &UGA_Fire::ProcessResolvedShots);
-		}
-	}
+
+	Character->ServerShotComponent->SubmitShot(Request);
 }
 
 bool UGA_Fire::TryConsumeServerShotBudget()
@@ -425,74 +272,4 @@ bool UGA_Fire::TryConsumeServerShotBudget()
 
 	ServerShotCredits -= 1.0;
 	return true;
-}
-
-void UGA_Fire::ExpirePendingShots()
-{
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	UWorld* World = GetWorld();
-	if (!ActorInfo || !ActorInfo->IsNetAuthority() || !World) return;
-
-	const double Now = World->GetTimeSeconds();
-	for (int32 i = FireAbilityDatas.Num() - 1; i >= 0; --i)
-	{
-		if (Now - FireAbilityDatas[i].ServerReceiptTime >= MaxPendingShotWait)
-		{
-			UE_LOG(LogAbilitySystem, Log, TEXT("Pending shot expired. Movement timestamp: %f"), FireAbilityDatas[i].CMCMovementTimestamp);
-			FireAbilityDatas.RemoveAt(i);
-		}
-	}
-
-	if (FireAbilityDatas.IsEmpty())
-	{
-		World->GetTimerManager().ClearTimer(PendingShotCleanupTimerHandle);
-	}
-}
-
-void UGA_Fire::OnMovementHistoryRecorded(float Timestamp)
-{
-	if (!IsActive()) return;
-	ExpirePendingShots();
-	if (FireAbilityDatas.Num() == 0) return;
-	if (UTopDownCMC* CMC = SubscribedCMC.Get())
-	{
-		FCharacterMovementDataForHistoryBuffer CharacterMovementData;
-		if (CMC->TryFindMovementHistory(Timestamp, CharacterMovementData))
-		{
-			for (int32 i = 0; i < FireAbilityDatas.Num();)
-			{
-				if (FireAbilityDatas[i].CMCMovementTimestamp == Timestamp)
-				{
-					const FResolvedShot ResolvedShot{FireAbilityDatas[i], CharacterMovementData.ServerSimulatedLocation};
-					FireAbilityDatas.RemoveAt(i);
-					QueueResolvedShot(ResolvedShot.Request, ResolvedShot.ReferenceOrigin);
-					UE_LOG(LogAbilitySystem, Verbose, TEXT("Shot resolved from movement history. Timestamp: %f, Wait: %.3f s"), Timestamp, GetWorld()->GetTimeSeconds() - ResolvedShot.Request.ServerReceiptTime);
-				}
-				else
-				{
-					++i;
-				}
-			}
-		}
-	}
-	if (FireAbilityDatas.IsEmpty())
-	{
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().ClearTimer(PendingShotCleanupTimerHandle);
-		}
-	}
-}
-
-void UGA_Fire::ProcessResolvedShots()
-{
-	ResolvedShotTimerHandle.Invalidate();
-	// Detach the batch before effects can cancel the ability and clear its queues.
-	const TArray<FResolvedShot> ShotsToProcess = MoveTemp(ResolvedShots);
-	const FPredictionKey ActivationKey = GetCurrentActivationInfo().GetActivationPredictionKey();
-	for (const FResolvedShot& Shot : ShotsToProcess)
-	{
-		if (!IsActive() || GetCurrentActivationInfo().GetActivationPredictionKey() != ActivationKey) return;
-		ValidateAndApplyServerShot(Shot.Request, Shot.ReferenceOrigin);
-	}
 }
