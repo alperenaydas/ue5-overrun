@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 #include "Overrun/AbilitySystem/OverrunGameplayTags.h"
+#include "Overrun/Combat/OverrunHitFlashComponent.h"
 
 ATestCube::ATestCube()
 {
@@ -22,6 +23,7 @@ ATestCube::ATestCube()
 
 void ATestCube::BeginPlay()
 {
+	HitFlashComponent = FindComponentByClass<UOverrunHitFlashComponent>();
 	Super::BeginPlay();
 	if (AbilitySystemComponent)
 	{
@@ -30,8 +32,9 @@ void ATestCube::BeginPlay()
 		{
 			AbilitySystemComponent->SetNumericAttributeBase(UOverrunAttributeSet::GetMaxHealthAttribute(), DefaultMaxHealth);
 			AbilitySystemComponent->SetNumericAttributeBase(UOverrunAttributeSet::GetHealthAttribute(), DefaultMaxHealth);
-			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(this, &ATestCube::HandleHealthChanged);
 		}
+		
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(this, &ATestCube::HandleHealthChanged);
 	}
 }
 
@@ -46,6 +49,13 @@ UAbilitySystemComponent* ATestCube::GetAbilitySystemComponent() const
 
 void ATestCube::HandleHealthChanged(const FOnAttributeChangeData& Data)
 {
+	if (Data.NewValue < Data.OldValue && GetNetMode() != NM_DedicatedServer)
+	{
+		if (IsValid(HitFlashComponent))
+		{
+			HitFlashComponent->PlayHitFlash();
+		}
+	}
 	if (HasAuthority())
 	{
 

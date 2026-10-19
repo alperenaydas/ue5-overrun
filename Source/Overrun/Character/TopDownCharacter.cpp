@@ -19,6 +19,7 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Overrun/Combat/OverrunHitFlashComponent.h"
 #include "Overrun/Combat/OverrunServerShotComponent.h"
 
 // Sets default values
@@ -76,6 +77,7 @@ void ATopDownCharacter::MulticastShotCosmetics_Implementation(FVector_NetQuantiz
 // Called when the game starts or when spawned
 void ATopDownCharacter::BeginPlay()
 {
+	HitFlashComponent = FindComponentByClass<UOverrunHitFlashComponent>();
 	Super::BeginPlay();
 }
 
@@ -207,6 +209,11 @@ void ATopDownCharacter::EnterDeadTransition() const
 	{
 		ServerShotComponent->CancelPendingShots();
 	}
+}
+
+UOverrunHitFlashComponent* ATopDownCharacter::GetHitFlashComponent() const
+{
+	return HitFlashComponent.Get();
 }
 
 void ATopDownCharacter::OnMoveAction(const FInputActionValue& Value)

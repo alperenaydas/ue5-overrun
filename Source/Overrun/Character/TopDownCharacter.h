@@ -6,6 +6,7 @@
 #include "Engine/NetSerialization.h"
 #include "TopDownCharacter.generated.h"
 
+class UOverrunHitFlashComponent;
 class UOverrunServerShotComponent;
 class UGameplayEffect;
 class UGameplayAbility;
@@ -64,6 +65,11 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Combat|Presentation")
 	void PlayShotTracer(FVector ImpactPoint);
+	
+protected:
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UOverrunHitFlashComponent> HitFlashComponent = nullptr;
 
 public:
 	virtual void BeginPlay() override;
@@ -80,6 +86,7 @@ public:
 	float GetLocomotionDirection() const;
 	
 	void EnterDeadTransition() const;
+	UOverrunHitFlashComponent* GetHitFlashComponent() const;
 
 private:
 	void OnMoveAction(const FInputActionValue& Value);

@@ -9,6 +9,7 @@
 #include "Overrun/AbilitySystem/OverrunAttributeSet.h"
 #include "Overrun/AbilitySystem/OverrunGameplayTags.h"
 #include "Overrun/Character/TopDownCharacter.h"
+#include "Overrun/Combat/OverrunHitFlashComponent.h"
 
 ATopDownPlayerState::ATopDownPlayerState()
 {
@@ -55,10 +56,7 @@ void ATopDownPlayerState::BeginPlay()
 	Super::BeginPlay();
 	if (AbilitySystemComponent)
 	{
-		if (HasAuthority())
-		{
-			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(OverrunAttributeSet->GetHealthAttribute()).AddUObject(this, &ATopDownPlayerState::HandleHealthChanged);
-		}
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(OverrunAttributeSet->GetHealthAttribute()).AddUObject(this, &ATopDownPlayerState::HandleHealthChanged);
 	}
 }
 
@@ -74,6 +72,19 @@ void ATopDownPlayerState::OnRep_IsDead(bool bOldIsDead) const
 
 void ATopDownPlayerState::HandleHealthChanged(const FOnAttributeChangeData& Data)
 {
+	if (Data.NewValue < Data.OldValue && GetNetMode() != NM_DedicatedServer)
+	{
+		if (ATopDownCharacter* Character = Cast<ATopDownCharacter>(GetPawn()))
+		{
+			if (UOverrunHitFlashComponent* Flash = Character->GetHitFlashComponent())
+			{
+				if (IsValid(Flash))
+				{
+					Flash->PlayHitFlash();
+				}
+			}
+		}
+	}
 	if (HasAuthority() && !IsDead)
 	{
 		if (Data.OldValue > 0 && Data.NewValue <= 0)

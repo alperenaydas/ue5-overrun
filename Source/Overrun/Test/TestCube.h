@@ -8,6 +8,7 @@
 #include "GameFramework/Actor.h"
 #include "TestCube.generated.h"
 
+class UOverrunHitFlashComponent;
 class UOverrunAttributeSet;
 class UStaticMeshComponent;
 
@@ -31,6 +32,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	float DefaultMaxHealth = 100.f;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UOverrunHitFlashComponent> HitFlashComponent = nullptr;
 	
 
 protected:
