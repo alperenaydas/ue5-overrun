@@ -21,7 +21,6 @@ void UOverrunMassRepRemovalObserver::ConfigureQueries(const TSharedRef<FMassEnti
 	EntityQuery.AddTagRequirement<FOverrunMassProbeTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddSubsystemRequirement<UMassReplicationSubsystem>(EMassFragmentAccess::ReadWrite);
-	Super::ConfigureQueries(EntityManager);
 }
 
 void UOverrunMassRepRemovalObserver::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)

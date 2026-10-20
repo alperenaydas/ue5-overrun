@@ -1,8 +1,12 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Overrun/Mass/OverrunClientBubbleInfo.h"
+#include "Engine/Engine.h"
 #include "Engine/NetConnection.h"
+#include "Engine/NetDriver.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
 
 AOverrunClientBubbleInfo::AOverrunClientBubbleInfo(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
@@ -44,16 +48,34 @@ void AOverrunClientBubbleInfo::Tick(float DeltaSeconds)
 		return;
 	}
 
+	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
+	const bool bPossessionReady = Controller && IsValid(Controller->GetPawn()) &&
+		Controller->AcknowledgedPawn == Controller->GetPawn();
+	if (!bPossessionReady)
+	{
+		MovementCredit = 0.0;
+		return;
+	}
+
 	constexpr int32 HeaderBytes = OverrunMovement::HeaderBytes;
 	constexpr int32 RecordBytes = OverrunMovement::RecordBytes;
 	constexpr int32 CallAllowanceBytes = 64;
 	constexpr int32 MaxPacketsPerTick = 32;
-	constexpr double MaxCredit = MaxPacketsPerTick *
-		(HeaderBytes + RecordBytes * OverrunMovement::MaxRecords + CallAllowanceBytes);
-
 	const double BytesPerSecond = FMath::Min(380000.0, double(Connection->CurrentNetSpeed) * 0.75);
-	MovementCredit = FMath::Min(MaxCredit, MovementCredit +
-		BytesPerSecond * FMath::Clamp(double(DeltaSeconds), 0.0, 0.1));
+	const UNetDriver* Driver = Connection->GetDriver();
+	const double EngineTickRate = GEngine ? GEngine->GetMaxTickRate(0.0f, false) : 0.0;
+	const double NetTickRate = Driver ? double(Driver->MaxNetTickRate) : 0.0;
+	const double DesiredTickRate = NetTickRate > 0.0
+		? (EngineTickRate > 0.0 ? FMath::Min(EngineTickRate, NetTickRate) : NetTickRate)
+		: EngineTickRate;
+	double BudgetDeltaSeconds = FMath::Clamp(double(DeltaSeconds), 0.0, 0.1);
+	if (DesiredTickRate > 0.0)
+	{
+		BudgetDeltaSeconds = FMath::Min(BudgetDeltaSeconds, 1.0 / DesiredTickRate);
+	}
+	const double FrameCredit = BytesPerSecond * BudgetDeltaSeconds;
+	const double CreditLimit = FMath::Max(double(HeaderBytes + RecordBytes + CallAllowanceBytes), FrameCredit);
+	MovementCredit = FMath::Min(CreditLimit, MovementCredit + FrameCredit);
 
 	const int32 MaxRecordsByBunch = FMath::Clamp(
 		(Connection->GetMaxSingleBunchSizeBits() - 1024 - OverrunMovement::HeaderBits) /
@@ -84,23 +106,7 @@ void AOverrunClientBubbleInfo::Tick(float DeltaSeconds)
 
 		Packet.Sequence = ++MovementSequence;
 		MovementCredit -= HeaderBytes + RecordBytes * Packet.Records.Num() + CallAllowanceBytes;
-		MovementRecordsAttempted += uint32(Packet.Records.Num());
-		++MovementPacketsAttempted;
 		ClientReceiveMovement(Packet);
-	}
-
-	MovementStatsElapsed += DeltaSeconds;
-	if (MovementStatsElapsed >= 1.0)
-	{
-		UE_LOG(LogTemp, Display,
-			TEXT("OverrunMovement: agents=%d attempted=%.0f records/s packets=%.0f/s netspeed=%d"),
-			AgentsSerializer.Bubble.GetAgents().Num(),
-			double(MovementRecordsAttempted) / MovementStatsElapsed,
-			double(MovementPacketsAttempted) / MovementStatsElapsed,
-			Connection->CurrentNetSpeed);
-		MovementStatsElapsed = 0.0;
-		MovementRecordsAttempted = 0;
-		MovementPacketsAttempted = 0;
 	}
 #endif
 }

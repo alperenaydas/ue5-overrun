@@ -36,7 +36,4 @@ protected:
 private:
 	double MovementCredit = 0.0;
 	uint32 MovementSequence = 0;
-	double MovementStatsElapsed = 0.0;
-	uint32 MovementRecordsAttempted = 0;
-	uint32 MovementPacketsAttempted = 0;
 };

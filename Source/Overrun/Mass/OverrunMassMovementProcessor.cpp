@@ -7,6 +7,7 @@
 #include "MassExecutionContext.h"
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
+#include "OverrunCrowdArrivalTrait.h"
 #include "OverrunMassProbeTag.h"
 #include "Overrun/Character/TopDownCharacter.h"
 #include "Overrun/Player/TopDownPlayerState.h"
@@ -26,7 +27,8 @@ void UOverrunMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
-	Super::ConfigureQueries(EntityManager);
+	EntityQuery.AddRequirement<FOverrunCrowdArrivalFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddConstSharedRequirement<FOverrunCrowdArrivalParameters>(EMassFragmentPresence::Optional);
 }
 
 void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -62,10 +64,13 @@ void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, F
 		const TArrayView<FTransformFragment> Transforms = Context.GetMutableFragmentView<FTransformFragment>();
 		const TConstArrayView<FMassVelocityFragment> Velocities = Context.GetFragmentView<FMassVelocityFragment>();
 		const TArrayView<FMassMoveTargetFragment> MoveTargets = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+		const auto Arrivals = Context.GetMutableFragmentView<FOverrunCrowdArrivalFragment>();
+		const FOverrunCrowdArrivalParameters* ArrivalParams = Context.GetConstSharedFragmentPtr<FOverrunCrowdArrivalParameters>();
+		const bool bUsesArrival = ArrivalParams && !Arrivals.IsEmpty();
 
 		constexpr float DesiredSpeed = 300.f;
-		constexpr double StopDistance = 100.0;
-		constexpr double ResumeDistance = 150.0;
+		const double StopDistance = bUsesArrival ? ArrivalParams->StopDistance : 100.0;
+		const double ResumeDistance = bUsesArrival ? ArrivalParams->ResumeDistance : 150.0;
 		constexpr float TurnRate = 360.f;
 
 		const float DeltaSeconds = Context.GetDeltaTimeSeconds();
@@ -107,7 +112,23 @@ void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, F
 
 			const double MoveThreshold = bWasStanding ? ResumeDistance : StopDistance;
 
-			const bool bShouldMove = !PlayerLocations.IsEmpty() && DistanceToPlayer > MoveThreshold;
+			bool bShouldMove = !PlayerLocations.IsEmpty() && DistanceToPlayer > MoveThreshold;
+			bool bHolding = false;
+			if (bUsesArrival)
+			{
+				FOverrunCrowdArrivalFragment& Arrival = Arrivals[EntityIt];
+				const bool bWasHolding = Arrival.bHolding;
+				Arrival.bHasTarget = !PlayerLocations.IsEmpty();
+				Arrival.TargetLocation = CurrentLocation + ToPlayer;
+				Arrival.DistanceToTarget = Arrival.bHasTarget ? DistanceToPlayer : TNumericLimits<double>::Max();
+				Arrival.bHolding = ArrivalParams->ShouldHold(bWasHolding, Arrival.bHasTarget, Arrival.DistanceToTarget);
+				if (Arrival.bHolding && !bWasHolding)
+				{
+					Arrival.HoldLocation = CurrentLocation;
+				}
+				bHolding = Arrival.bHolding;
+				bShouldMove = Arrival.bHasTarget && !bHolding;
+			}
 
 			const EMassMovementAction WantedAction = bShouldMove ? EMassMovementAction::Move : EMassMovementAction::Stand;
 
@@ -118,7 +139,7 @@ void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, F
 				MoveTarget.CreateNewAction(WantedAction, *World);
 			}
 
-			MoveTarget.DesiredSpeed.Set(DesiredSpeed);
+			MoveTarget.DesiredSpeed.Set(bUsesArrival && !bShouldMove ? 0.f : DesiredSpeed);
 			MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
 			MoveTarget.SlackRadius = 0.f;
 			MoveTarget.EntityDistanceToGoal = FMassMoveTargetFragment::UnsetDistance;
@@ -134,7 +155,12 @@ void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, F
 			}
 			else
 			{
-				if (bStartingAction)
+				if (bUsesArrival)
+				{
+					MoveTarget.Center = bHolding ? Arrivals[EntityIt].HoldLocation : CurrentLocation;
+					MoveTarget.Forward = ToPlayerDirection.IsNearlyZero() ? Transform.GetRotation().GetForwardVector() : ToPlayerDirection;
+				}
+				else if (bStartingAction)
 				{
 					MoveTarget.Center = CurrentLocation;
 					MoveTarget.Forward = Transform.GetRotation().GetForwardVector();
@@ -143,7 +169,7 @@ void UOverrunMassMovementProcessor::Execute(FMassEntityManager& EntityManager, F
 				MoveTarget.DistanceToGoal = 0.f;
 			}
 
-			FVector FacingDirection = Velocities[EntityIt].Value;
+			FVector FacingDirection = bHolding ? ToPlayerDirection : Velocities[EntityIt].Value;
 			FacingDirection.Z = 0.0;
 
 			if (FacingDirection.SizeSquared() < FMath::Square(5.0))

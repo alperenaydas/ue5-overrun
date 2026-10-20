@@ -2,7 +2,10 @@
 
 #include "MassCommonFragments.h"
 #include "MassEntityManager.h"
+#include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
 #include "MassReplicationSubsystem.h"
+#include "MassSimulationLOD.h"
 #include "OverrunEnemyHealthFragment.h"
 
 FOverrunClientBubbleHandler::FOverrunClientBubbleHandler()
@@ -165,6 +168,11 @@ void FOverrunClientBubbleHandler::ApplyMovement(const FOverrunMovementPacket& Pa
 		FTransform& Transform = EntityView.GetFragmentData<FTransformFragment>().GetMutableTransform();
 		Transform.SetLocation(Position);
 		Transform.SetRotation(Rotation);
+		if (FMassMoveTargetFragment* MoveTarget = EntityView.GetFragmentDataPtr<FMassMoveTargetFragment>())
+		{
+			// Native height smoothing also runs on clients; its target must follow the snapshot.
+			MoveTarget->Center = Position;
+		}
 
 		Binding->LastSequence = Packet.Sequence;
 		Binding->LastSampleTimeMs = Record.SampleTimeMs;
@@ -202,12 +210,22 @@ void FOverrunClientBubbleHandler::PostReplicatedAdd(const TArrayView<int32> Adde
 	TransformHandler.ClearFragmentViewsForSpawnQuery();
 
 	UMassReplicationSubsystem* Replication = Serializer->GetReplicationSubsystem();
+	FMassEntityManager& EntityManager = Serializer->GetEntityManagerChecked();
 	for (const int32 Index : AddedIndices)
 	{
 		const FOverrunAgentFastArrayItem& Item = (*Agents)[Index];
 		const FMassReplicationEntityInfo* Info = Replication->FindMassEntityInfo(Item.Agent.GetNetID());
-		if (Info && Info->ReplicationID == Item.ReplicationID && Info->Entity.IsSet())
+		if (Info && Info->ReplicationID == Item.ReplicationID && Info->Entity.IsSet() &&
+			EntityManager.IsEntityValid(Info->Entity))
 		{
+			EntityManager.RemoveTagFromEntity(Info->Entity, FMassCodeDrivenMovementTag::StaticStruct());
+			EntityManager.SwapTagsForEntity(Info->Entity, FMassOffLODTag::StaticStruct(), FMassLowLODTag::StaticStruct());
+			FMassEntityView EntityView(EntityManager, Info->Entity);
+			if (FMassMoveTargetFragment* MoveTarget = EntityView.GetFragmentDataPtr<FMassMoveTargetFragment>())
+			{
+				MoveTarget->Center = EntityView.GetFragmentData<FTransformFragment>().GetTransform().GetLocation();
+			}
+
 			// Preserve ordering state if the same add callback is replayed.
 			MovementBindings.FindOrAdd(Item.ReplicationID).NetID = Item.Agent.GetNetID();
 		}

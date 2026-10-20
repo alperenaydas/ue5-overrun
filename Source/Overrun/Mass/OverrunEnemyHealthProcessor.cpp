@@ -20,7 +20,6 @@ void UOverrunMassHealthProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddTagRequirement<FOverrunMassProbeTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FOverrunEnemyHealthFragment>(EMassFragmentAccess::ReadWrite);
 	ProcessorRequirements.AddSubsystemRequirement<UOverrunEnemyDamageSubsystem>(EMassFragmentAccess::ReadWrite);
-	Super::ConfigureQueries(EntityManager);
 }
 
 void UOverrunMassHealthProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)

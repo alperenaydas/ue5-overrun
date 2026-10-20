@@ -29,7 +29,6 @@ void UOverrunMassTransformProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	EntityQuery.AddRequirement<FOverrunEnemyHealthFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FOverrunEnemyHitPresentationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RequireMutatingWorldAccess();
-	Super::ConfigureQueries(EntityManager);
 }
 
 void UOverrunMassTransformProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
