@@ -34,4 +34,12 @@ struct FOverrunAgentFastArrayItem : public FMassFastArrayItemBase
 
 	UPROPERTY()
 	FOverrunReplicatedAgent Agent;
+
+#if UE_REPLICATION_COMPILE_SERVER_CODE
+	uint64 MovementPose = 0;
+	uint32 MovementSampleTimeMs = 0;
+	double NextMovementTime = 0.0;
+	bool bHasMovement = false;
+	bool bMovementScheduleInitialized = false;
+#endif
 };

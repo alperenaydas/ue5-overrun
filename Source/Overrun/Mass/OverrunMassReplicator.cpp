@@ -1,6 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Overrun/Mass/OverrunMassReplicator.h"
+#include "Engine/World.h"
+#include "MassCommonFragments.h"
 #include "MassReplicationTransformHandlers.h"
 #include "MassExecutionContext.h"
 #include "OverrunClientBubbleInfo.h"
@@ -34,14 +36,21 @@ void UOverrunMassReplicator::ProcessClientReplication(FMassExecutionContext& Con
 		AOverrunClientBubbleInfo& CrowdBubbleInfo = RepSharedFrag->GetTypedClientBubbleInfoChecked<AOverrunClientBubbleInfo>(ClientHandle);
 		PositionYawHandler.AddEntity(EntityIdx, InReplicatedAgent.GetReplicatedPositionYawDataMutable());
 		InReplicatedAgent.HitSerial = Healths[EntityIdx].HitSerial;
-		return CrowdBubbleInfo.GetAgentsSerializer().Bubble.AddAgent(Context.GetEntity(EntityIdx), InReplicatedAgent);
+		FOverrunClientBubbleHandler& Bubble = CrowdBubbleInfo.GetAgentsSerializer().Bubble;
+		const FMassReplicatedAgentHandle Handle = Bubble.AddAgent(Context.GetEntity(EntityIdx), InReplicatedAgent);
+		Bubble.QueueMovement(Handle,
+			Context.GetFragmentView<FTransformFragment>()[EntityIdx].GetTransform(),
+			Context.GetWorld()->GetTimeSeconds());
+		return Handle;
 	};
 	
-	auto ModifyEntityCallback = [&RepSharedFrag, &PositionYawHandler, &Healths](FMassExecutionContext& Context, const int32 EntityIdx, const EMassLOD::Type LOD, const double Time, const FMassReplicatedAgentHandle Handle, const FMassClientHandle ClientHandle)
+	auto ModifyEntityCallback = [&RepSharedFrag, &Healths](FMassExecutionContext& Context, const int32 EntityIdx, const EMassLOD::Type LOD, const double Time, const FMassReplicatedAgentHandle Handle, const FMassClientHandle ClientHandle)
 	{
 		AOverrunClientBubbleInfo& CrowdBubbleInfo = RepSharedFrag->GetTypedClientBubbleInfoChecked<AOverrunClientBubbleInfo>(ClientHandle);
 		FOverrunClientBubbleHandler& Bubble = CrowdBubbleInfo.GetAgentsSerializer().Bubble;
-		PositionYawHandler.ModifyEntity<FOverrunAgentFastArrayItem>(Handle, EntityIdx, Bubble.GetTransformHandlerMutable());
+		Bubble.QueueMovement(Handle,
+			Context.GetFragmentView<FTransformFragment>()[EntityIdx].GetTransform(),
+			Context.GetWorld()->GetTimeSeconds());
 		Bubble.SetHitSerial(Handle, Healths[EntityIdx].HitSerial);
 	};
 
