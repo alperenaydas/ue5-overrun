@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MassClientBubbleHandler.h"
+#include "MassEntityHandle.h"
 #include "MassReplicationTransformHandlers.h"
 #include "MassClientBubbleSerializerBase.h"
 #include "OverrunReplicatedAgent.h"
@@ -54,6 +55,7 @@ private:
 	struct FMovementBinding
 	{
 		FMassNetworkID NetID;
+		FMassEntityHandle Entity;
 		uint32 LastSequence = 0;
 		uint32 LastSampleTimeMs = 0;
 		bool bHasSequence = false;

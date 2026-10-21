@@ -13,15 +13,14 @@ UCLASS()
 class OVERRUN_API UOverrunMinionAnimInstance : public UAnimInstance
 {
 	GENERATED_BODY()
-	
+
+public:
+	void SetPresentationGroundSpeed(float InGroundSpeed);
+
 protected:
 	virtual void NativeInitializeAnimation() override;
-	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	
 private:
 	UPROPERTY(BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
 	float GroundSpeed = 0.f;
-	
-	FVector PreviousLocation;
-	bool bHasPreviousLocation = false;
 };

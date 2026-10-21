@@ -7,6 +7,9 @@
 #include "MassReplicationSubsystem.h"
 #include "MassSimulationLOD.h"
 #include "OverrunEnemyHealthFragment.h"
+#include "OverrunEnemyHitPresentationFragment.h"
+#include "OverrunEnemyPresentationFragment.h"
+#include "OverrunInstancedVisualizationTrait.h"
 
 FOverrunClientBubbleHandler::FOverrunClientBubbleHandler()
 	: TransformHandler(*this)
@@ -93,7 +96,6 @@ bool FOverrunClientBubbleHandler::BuildMovementPacket(
 		Item.NextMovementTime += OverrunMovement::Interval;
 		if (Item.NextMovementTime <= Now)
 		{
-			// Discard missed deadlines after a hitch instead of queuing old poses.
 			Item.NextMovementTime = Now + OverrunMovement::Interval;
 		}
 	}
@@ -147,7 +149,6 @@ void FOverrunClientBubbleHandler::ApplyMovement(const FOverrunMovementPacket& Pa
 
 		const int32 Token = int32(Record.Token);
 		FMovementBinding* Binding = MovementBindings.Find(Token);
-		// Movement never spawns an entity, including when it arrives before lifecycle data.
 		if (!Binding || (Binding->bHasSequence &&
 			!OverrunMovement::IsNewerSequence(Packet.Sequence, Binding->LastSequence)))
 		{
@@ -170,7 +171,6 @@ void FOverrunClientBubbleHandler::ApplyMovement(const FOverrunMovementPacket& Pa
 		Transform.SetRotation(Rotation);
 		if (FMassMoveTargetFragment* MoveTarget = EntityView.GetFragmentDataPtr<FMassMoveTargetFragment>())
 		{
-			// Native height smoothing also runs on clients; its target must follow the snapshot.
 			MoveTarget->Center = Position;
 		}
 
@@ -226,8 +226,25 @@ void FOverrunClientBubbleHandler::PostReplicatedAdd(const TArrayView<int32> Adde
 				MoveTarget->Center = EntityView.GetFragmentData<FTransformFragment>().GetTransform().GetLocation();
 			}
 
-			// Preserve ordering state if the same add callback is replayed.
-			MovementBindings.FindOrAdd(Item.ReplicationID).NetID = Item.Agent.GetNetID();
+			FMovementBinding& Binding = MovementBindings.FindOrAdd(Item.ReplicationID);
+			if (Binding.NetID != Item.Agent.GetNetID() || Binding.Entity != Info->Entity)
+			{
+				Binding = FMovementBinding();
+				if (FOverrunInstanceAnimationFragment* Animation = EntityView.GetFragmentDataPtr<FOverrunInstanceAnimationFragment>())
+				{
+					Animation->Reset();
+				}
+				if (FOverrunEnemyPresentationFragment* Pose = EntityView.GetFragmentDataPtr<FOverrunEnemyPresentationFragment>())
+				{
+					Pose->Reset();
+				}
+				if (FOverrunEnemyHitPresentationFragment* Hit = EntityView.GetFragmentDataPtr<FOverrunEnemyHitPresentationFragment>())
+				{
+					*Hit = FOverrunEnemyHitPresentationFragment();
+				}
+			}
+			Binding.NetID = Item.Agent.GetNetID();
+			Binding.Entity = Info->Entity;
 		}
 	}
 }
@@ -236,7 +253,6 @@ void FOverrunClientBubbleHandler::PostReplicatedChange(const TArrayView<int32> C
 {
 	PostReplicatedChangeHelper(ChangedIndices, [](const FMassEntityView& EntityView, const FOverrunReplicatedAgent& Agent)
 	{
-		// The lifecycle pose is immutable: a hit update must not restore the spawn pose.
 		EntityView.GetFragmentData<FOverrunEnemyHealthFragment>().HitSerial = Agent.HitSerial;
 	});
 }

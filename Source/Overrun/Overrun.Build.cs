@@ -10,7 +10,7 @@ public class Overrun : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "GameplayTasks", "UMG", "MassEntity" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "MassCommon", "MassLOD", "MassReplication", "MassSpawner", "NetCore", "MassActors", "MassNavigation", "MassMovement", "Chaos", "ChaosCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimToTexture", "MassCommon", "MassLOD", "MassReplication", "MassRepresentation", "MassSpawner", "NetCore", "MassActors", "MassNavigation", "MassMovement", "Chaos", "ChaosCore" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
