@@ -8,6 +8,7 @@
 #include "MassSimulationLOD.h"
 #include "Movement/MassMovementProcessors.h"
 #include "OverrunCrowdArrival.h"
+#include "OverrunCrowdNavigation.h"
 #include "OverrunMassProbeTag.h"
 #include "Steering/MassSteeringFragments.h"
 
@@ -28,6 +29,7 @@ void UOverrunMassArrivalProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 	ArrivalQuery.AddTagRequirement<FMassCodeDrivenMovementTag>(EMassFragmentPresence::All);
 	ArrivalQuery.AddTagRequirement<FMassOffLODTag>(EMassFragmentPresence::None);
 	ArrivalQuery.AddRequirement<FOverrunCrowdArrivalFragment>(EMassFragmentAccess::ReadOnly);
+	ArrivalQuery.AddRequirement<FOverrunCrowdNavigationFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	ArrivalQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	ArrivalQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
 	ArrivalQuery.AddRequirement<FMassDesiredMovementFragment>(EMassFragmentAccess::ReadWrite);
@@ -51,10 +53,12 @@ void UOverrunMassArrivalProcessor::Execute(FMassEntityManager& EntityManager, FM
 	ArrivalQuery.ForEachEntityChunk(Context, [&bNeedsSeparation](FMassExecutionContext& ChunkContext)
 	{
 		const auto States = ChunkContext.GetFragmentView<FOverrunCrowdArrivalFragment>();
+		const auto Navigation = ChunkContext.GetFragmentView<FOverrunCrowdNavigationFragment>();
 		const auto& Params = ChunkContext.GetConstSharedFragment<FOverrunCrowdArrivalParameters>();
 		for (FMassExecutionContext::FEntityIterator It = ChunkContext.CreateEntityIterator(); It; ++It)
 		{
-			if (States[It].bHasTarget && !States[It].bHolding && States[It].DistanceToTarget < Params.CloseDistance)
+			if ((Navigation.IsEmpty() || Navigation[It].bFinalSegment) && States[It].bHasTarget
+				&& !States[It].bHolding && States[It].DistanceToTarget < Params.CloseDistance)
 			{
 				bNeedsSeparation = true;
 				break;
@@ -89,6 +93,7 @@ void UOverrunMassArrivalProcessor::Execute(FMassEntityManager& EntityManager, FM
 	ArrivalQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& ChunkContext)
 	{
 		const auto States = ChunkContext.GetFragmentView<FOverrunCrowdArrivalFragment>();
+		const auto Navigation = ChunkContext.GetFragmentView<FOverrunCrowdNavigationFragment>();
 		const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
 		const auto Velocities = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
 		const auto Movement = ChunkContext.GetMutableFragmentView<FMassDesiredMovementFragment>();
@@ -104,13 +109,13 @@ void UOverrunMassArrivalProcessor::Execute(FMassEntityManager& EntityManager, FM
 		{
 			const auto& State = States[It];
 			const FVector Position = Transforms[It].GetTransform().GetLocation();
-			if (State.bHolding || !State.bHasTarget)
+			if (State.bHolding || !State.bHasTarget || (!Navigation.IsEmpty() && !Navigation[It].bCanMove))
 			{
 				OverrunCrowd::HoldArrivalAtPosition(Position, Velocities[It], Movement[It], Forces[It],
 					Targets[It], Ghosts[It], Standing[It]);
 				continue;
 			}
-			if (State.DistanceToTarget >= Params.CloseDistance)
+			if (State.DistanceToTarget >= Params.CloseDistance || (!Navigation.IsEmpty() && !Navigation[It].bFinalSegment))
 			{
 				continue;
 			}

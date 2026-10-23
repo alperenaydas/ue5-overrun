@@ -38,6 +38,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "NavCorridor",
+			"Enabled": true
+		},
+		{
 			"Name": "AnimToTexture",
 			"Enabled": true
 		}

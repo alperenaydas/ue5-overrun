@@ -8,6 +8,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "OverrunCrowdArrivalTrait.h"
+#include "OverrunCrowdNavigation.h"
 #include "OverrunMassProbeTag.h"
 #include "Overrun/Character/TopDownCharacter.h"
 #include "Overrun/Player/TopDownPlayerState.h"
@@ -24,6 +25,7 @@ UOverrunMassMovementProcessor::UOverrunMassMovementProcessor() : EntityQuery(*th
 void UOverrunMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	EntityQuery.AddTagRequirement<FOverrunMassProbeTag>(EMassFragmentPresence::All);
+	EntityQuery.AddRequirement<FOverrunCrowdNavigationFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::None);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
